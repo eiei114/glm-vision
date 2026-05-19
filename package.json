@@ -1,6 +1,6 @@
 {
   "name": "glm-vision",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Pi extension that gives non-vision GLM models (z.ai) image understanding via GLM-4.6V",
   "main": "src/index.ts",
   "keywords": [
