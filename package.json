@@ -18,7 +18,10 @@
     "type": "git",
     "url": "https://github.com/eiei114/glm-vision.git"
   },
-  "homepage": "https://github.com/eiei114/glm-vision#readme",
+  "homepage": "https://www.npmjs.com/package/glm-vision",
+  "bugs": {
+    "url": "https://github.com/eiei114/glm-vision/issues"
+  },
   "pi": {
     "extensions": ["./src/index.ts"]
   }

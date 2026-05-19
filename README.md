@@ -1,5 +1,7 @@
 # glm-vision
 
+[![npm](https://img.shields.io/npm/v/glm-vision)](https://www.npmjs.com/package/glm-vision) [![GitHub](https://img.shields.io/badge/GitHub-eiei114%2Fglm--vision-blue)](https://github.com/eiei114/glm-vision)
+
 Pi extension that gives non-vision GLM models (z.ai) image understanding by routing images through a GLM vision model.
 
 ## How it works
