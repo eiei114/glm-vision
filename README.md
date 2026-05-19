@@ -27,6 +27,22 @@ This lets non-vision GLM models "see" images through a vision-capable sibling mo
 
 ## Installation
 
+### Via npm
+
+```bash
+pi install npm:glm-vision
+```
+
+Or add to `.pi/settings.json`:
+
+```json
+{
+  "packages": ["npm:glm-vision"]
+}
+```
+
+### From GitHub
+
 ```bash
 pi install git:github.com/eiei114/glm-vision
 ```
