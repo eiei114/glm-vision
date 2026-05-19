@@ -1,0 +1,25 @@
+{
+  "name": "glm-vision",
+  "version": "1.0.0",
+  "description": "Pi extension that gives non-vision GLM models (z.ai) image understanding via GLM-4.6V",
+  "main": "src/index.ts",
+  "keywords": [
+    "pi-package",
+    "pi-extension",
+    "glm",
+    "z.ai",
+    "vision",
+    "image",
+    "multimodal"
+  ],
+  "author": "eiei114",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/eiei114/glm-vision.git"
+  },
+  "homepage": "https://github.com/eiei114/glm-vision#readme",
+  "pi": {
+    "extensions": ["./src/index.ts"]
+  }
+}
