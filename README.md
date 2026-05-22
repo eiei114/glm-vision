@@ -99,6 +99,16 @@ Config stored at `~/.pi/glm-vision.json`:
 
 glm-vision reuses the same API key that Pi uses for the zai provider. No additional API key setup is needed — if your zai model works in Pi, glm-vision works too.
 
+## Release
+
+Publishing to npm is automated by GitHub Actions. To publish a new version:
+
+1. Update `version` in `package.json`.
+2. Commit and tag the release, for example `v1.0.3`, or create a GitHub Release for that tag.
+3. The `Publish to npm` workflow validates the package, skips if that exact version already exists on npm, and runs `npm publish --access public --provenance`.
+
+The workflow supports npm trusted publishing via GitHub OIDC. If trusted publishing is not configured on npm, add an `NPM_TOKEN` repository secret.
+
 ## License
 
 MIT

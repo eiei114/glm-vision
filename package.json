@@ -24,5 +24,16 @@
   },
   "pi": {
     "extensions": ["./src/index.ts"]
-  }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check": "npm pack --dry-run"
+  },
+  "files": [
+    "src/",
+    "README.md",
+    "LICENSE"
+  ]
 }
