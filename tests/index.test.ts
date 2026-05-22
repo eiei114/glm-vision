@@ -143,7 +143,10 @@ describe("extension behavior", () => {
     );
 
     expect(result.content).toEqual([
-      { type: "text", text: "[glm-vision error: 500 upstream down]" },
+      {
+        type: "text",
+        text: "[glm-vision error: Z.AI service error (HTTP 500). Retried automatically; try again later if it persists: upstream down]",
+      },
       imageBlock,
     ]);
   });
