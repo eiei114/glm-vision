@@ -21,7 +21,7 @@ const DEFAULT_CONFIG: VisionConfig = {
 };
 
 const MODELS = ["glm-4.6v", "glm-4.6v-flash"];
-const CHECK_MODELS = [...MODELS, "glm-5v-turbo"];
+const CHECK_MODELS = [...MODELS, "glm-4.5v", "glm-4.6v-flashx", "glm-5v-turbo"];
 
 function loadConfig(): VisionConfig {
   try {

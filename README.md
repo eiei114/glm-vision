@@ -92,6 +92,14 @@ To test a newly announced model before editing the extension, pass it explicitly
 /glm-vision check glm-new-vision-model
 ```
 
+Maintainers can also run the upstream watcher outside Pi:
+
+```bash
+npm run check:upstream
+```
+
+That watcher reads official Z.AI sources, including `https://docs.z.ai/llms.txt`, the GLM-4.6V guide, and the GLM Coding Plan quick start. If `ZAI_API_KEY` is set, it also probes the Coding Plan API and fails when a newly accepted probe model is not yet in `MODELS` / this README. The included GitHub Actions workflow runs this weekly, on manual dispatch, and when model-related files change.
+
 ### Available vision models
 
 | Model | Context | Notes |
@@ -99,7 +107,7 @@ To test a newly announced model before editing the extension, pass it explicitly
 | `glm-4.6v` | 128K | Default. Visual reasoning + tool calling |
 | `glm-4.6v-flash` | 128K | Lighter, faster. Supports thinking toggle |
 
-> **Note:** `glm-5v-turbo` is not available on the z.ai Coding Plan. Only the models above work.
+> **Note:** `glm-4.5v`, `glm-4.6v-flashx`, and `glm-5v-turbo` are tracked as probe candidates, but are not selectable until they are confirmed available on the z.ai Coding Plan. Only the models above are selectable by default.
 
 ### Configuration
 
