@@ -71,8 +71,26 @@ No configuration needed — it works automatically when:
 | `/glm-vision` | Show current status and model |
 | `/glm-vision on` | Enable image description |
 | `/glm-vision off` | Disable (forward images as-is) |
+| `/glm-vision check` | Probe z.ai Coding Plan availability for known vision models |
+| `/glm-vision check <model>` | Probe a new candidate model before adding it |
 | `/glm-vision glm-4.6v` | Switch to GLM-4.6V (default) |
 | `/glm-vision glm-4.6v-flash` | Switch to GLM-4.6V Flash (lighter) |
+
+### Checking Coding Plan model availability
+
+z.ai Coding Plan availability can change as new GLM vision models roll out. Run:
+
+```bash
+/glm-vision check
+```
+
+The command uses your existing zai provider API key and probes the known vision-model candidates. It reports which models are currently accepted by the Coding Plan API, so maintainers can quickly decide whether `MODELS` and this README need an update.
+
+To test a newly announced model before editing the extension, pass it explicitly:
+
+```bash
+/glm-vision check glm-new-vision-model
+```
 
 ### Available vision models
 
