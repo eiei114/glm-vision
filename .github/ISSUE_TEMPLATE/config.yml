@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: glm-vision README
+    url: https://github.com/eiei114/glm-vision#readme
+    about: Read setup, usage examples, and troubleshooting guidance before filing an issue.

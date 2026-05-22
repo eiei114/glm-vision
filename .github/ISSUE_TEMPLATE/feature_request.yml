@@ -1,0 +1,86 @@
+name: Feature request
+description: Suggest an improvement for glm-vision
+title: "Feature: "
+labels: ["enhancement"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this form for new model support, command changes, configuration options, workflow improvements, and documentation requests.
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: What workflow is blocked or painful today?
+      placeholder: I often need OCR-first output from dense screenshots, but the default prompt mixes transcription with summary...
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe the change you want.
+      placeholder: Add a command to switch between default, OCR, UI review, and diagram prompts.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: What workarounds or other designs did you consider?
+    validations:
+      required: false
+
+  - type: dropdown
+    id: scenario
+    attributes:
+      label: Primary scenario
+      options:
+        - UI screenshot review
+        - OCR / text extraction
+        - Diagram reading
+        - Error-image diagnosis
+        - Model/configuration support
+        - Release/documentation workflow
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: glm_vision_version
+    attributes:
+      label: glm-vision version
+      placeholder: 1.0.2
+    validations:
+      required: false
+
+  - type: input
+    id: pi_environment
+    attributes:
+      label: Pi environment
+      description: Include Pi version, OS, and active provider/model if relevant.
+      placeholder: Windows, Pi ..., zai / glm-5.1
+    validations:
+      required: false
+
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example prompt, image type, or desired output
+      description: Add a concrete example when possible. Remove private data.
+      render: text
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checks
+      options:
+        - label: I checked the README and existing issues for similar requests.
+          required: true
+        - label: I can provide a sample image or prompt if maintainers need it.
+          required: false
