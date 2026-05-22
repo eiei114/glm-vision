@@ -3,6 +3,17 @@
   "version": "1.0.2",
   "description": "Pi extension that gives non-vision GLM models (z.ai) image understanding via GLM-4.6V",
   "main": "src/index.ts",
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "validate:package": "npm pack --dry-run"
+  },
   "keywords": [
     "pi-package",
     "pi-extension",
@@ -24,5 +35,14 @@
   },
   "pi": {
     "extensions": ["./src/index.ts"]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.75.4",
+    "@eslint/js": "^9.0.0",
+    "@types/node": "^22.0.0",
+    "eslint": "^9.0.0",
+    "typescript": "^5.0.0",
+    "typescript-eslint": "^8.0.0",
+    "vitest": "^3.0.0"
   }
 }
