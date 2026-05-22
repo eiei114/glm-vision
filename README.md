@@ -6,21 +6,32 @@ Pi extension that gives non-vision GLM models (z.ai) image understanding by rout
 
 ## How it works
 
-When using a z.ai GLM text model (e.g. `glm-5.1`) and the `read` tool encounters an image file, glm-vision:
+When using a z.ai GLM text model (e.g. `glm-5.1`) and the `read` tool encounters one or more image files, glm-vision:
 
-1. Intercepts the image data
-2. Sends it to a GLM vision model (`glm-4.6v` by default)
-3. Returns a text description to the main model
+1. Intercepts the image data in the order Pi provided it
+2. Sends the images together to a GLM vision model (`glm-4.6v` by default)
+3. Returns a combined text description to the main model
 
 ```
-Image file → read tool → [glm-vision intercepts]
-                            ↓
-              GLM-4.6V describes the image
-                            ↓
-              Text description → main GLM model
+Image file(s) -> read tool -> [glm-vision intercepts]
+                              -> GLM-4.6V describes Image 1, Image 2, ...
+                              -> Combined text description -> main GLM model
 ```
 
 This lets non-vision GLM models "see" images through a vision-capable sibling model.
+
+## Multiple images
+
+When a tool result contains multiple images, glm-vision sends them in their original order and asks the vision model to refer to them as `Image 1`, `Image 2`, and so on. The answer includes per-image observations plus any cross-image comparison or combined conclusion the vision model can infer.
+
+Single-image behavior is backward compatible: one image is still described as a normal vision result, now with `images: 1` in the result header.
+
+### Limits and fallback behavior
+
+- `maxImages` controls how many images are sent in one vision request. Default: `4`.
+- If a tool result contains more than `maxImages` extractable images, glm-vision sends the first `maxImages` in order and notes the skipped count in the prompt/result header.
+- If no extractable image data is present, glm-vision leaves the tool result unchanged.
+- If authentication is missing or the vision request fails, glm-vision returns an error text and preserves the original image blocks so Pi can continue with the normal fallback path.
 
 ## Requirements
 
@@ -91,6 +102,7 @@ Config stored at `~/.pi/glm-vision.json`:
 {
   "model": "glm-4.6v",
   "enabled": true,
+  "maxImages": 4,
   "prompt": "Describe this image in detail..."
 }
 ```
