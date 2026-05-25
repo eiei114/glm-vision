@@ -12,7 +12,8 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "validate:package": "npm pack --dry-run"
+    "validate:package": "npm pack --dry-run",
+    "check:upstream": "node scripts/check-upstream-models.mjs"
   },
   "keywords": [
     "pi-package",

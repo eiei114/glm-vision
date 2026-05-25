@@ -70,6 +70,7 @@ export const DEFAULT_CONFIG: VisionConfig = {
 };
 
 export const MODELS = ["glm-4.6v", "glm-4.6v-flash"];
+export const CHECK_MODELS = [...MODELS, "glm-4.5v", "glm-4.6v-flashx", "glm-5v-turbo"];
 export const PRESET_NAMES = Object.keys(PRESET_PROMPTS) as PresetPromptMode[];
 
 function isVisionModel(value: unknown): value is string {
@@ -461,6 +462,57 @@ export interface GlmVisionExtensionOptions {
   cachePath?: string;
 }
 
+async function checkModelAvailability(
+  model: string,
+  apiKey: string,
+  signal?: AbortSignal,
+): Promise<{ model: string; ok: boolean; status?: number; message: string }> {
+  const url = `${BASE_URL}/chat/completions`;
+
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 1,
+      }),
+      signal,
+    });
+
+    if (res.ok) {
+      return { model, ok: true, status: res.status, message: "available" };
+    }
+
+    const text = await res.text();
+    const firstLine = text.replace(/\s+/g, " ").trim().slice(0, 160);
+    return {
+      model,
+      ok: false,
+      status: res.status,
+      message: firstLine || res.statusText || "unavailable",
+    };
+  } catch (err: any) {
+    return { model, ok: false, message: err.message || "request failed" };
+  }
+}
+
+async function checkCodingPlanModels(models: string[], apiKey: string, signal?: AbortSignal): Promise<string> {
+  const results = await Promise.all(models.map((model) => checkModelAvailability(model, apiKey, signal)));
+
+  return results
+    .map((result) => {
+      const mark = result.ok ? "OK" : "NO";
+      const status = result.status ? ` (${result.status})` : "";
+      return `${mark} ${result.model}: ${result.message}${status}`;
+    })
+    .join("\n");
+}
+
 // -- Extension --------------------------------------------------
 export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}) {
   const configPath = options.configPath || getConfigPath();
@@ -575,12 +627,13 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
     // /glm-vision command.
     pi.registerCommand("glm-vision", {
       description:
-        'Configure GLM vision model, prompt presets, and response cache. Try "status", "ocr", "cache clear", "prompt <text>", "reset".',
+        'Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Try "status", "ocr", "cache clear", "check".',
       getArgumentCompletions(prefix: string) {
         const options = [
           "status",
           "on",
           "off",
+          "check",
           "reset",
           "prompt",
           "cache on",
@@ -618,6 +671,32 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           configWarning = undefined;
           saveConfig(config, configPath);
           ctx.ui.notify("glm-vision: OFF", "info");
+          return;
+        }
+
+        if (command === "check") {
+          let apiKey: string | undefined;
+          try {
+            apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
+          } catch {
+            // fall through
+          }
+
+          if (!apiKey) {
+            ctx.ui.notify("glm-vision check: no zai API key found", "error");
+            return;
+          }
+
+          const customModels = rest
+            .join(" ")
+            .split(/[\s,]+/)
+            .map((model) => model.trim())
+            .filter(Boolean);
+          const modelsToCheck = customModels.length > 0 ? customModels : CHECK_MODELS;
+
+          ctx.ui.notify("glm-vision check: probing z.ai Coding Plan models...", "info");
+          const report = await checkCodingPlanModels(modelsToCheck, apiKey, ctx.signal);
+          ctx.ui.notify(`glm-vision Coding Plan check\n${report}`, "info");
           return;
         }
 

@@ -87,6 +87,8 @@ The screenshot shows a checkout form with a red validation message under the car
 | `/glm-vision` or `/glm-vision status` | Show status, model, prompt mode, cache stats, and active prompt. |
 | `/glm-vision on` | Enable image description. |
 | `/glm-vision off` | Disable image description and forward images as-is. |
+| `/glm-vision check` | Probe z.ai Coding Plan availability for known vision models. |
+| `/glm-vision check <model>` | Probe a new candidate model before adding it. |
 | `/glm-vision glm-4.6v` | Switch to GLM-4.6V (default). |
 | `/glm-vision glm-4.6v-flash` | Switch to GLM-4.6V Flash (lighter). |
 | `/glm-vision <preset>` | Switch prompt preset, e.g. `/glm-vision ocr`. |
@@ -121,6 +123,30 @@ Cache hits are visible in returned tool content:
 
 Fresh API calls show `cache miss` and are saved for later reuse when the cache is enabled.
 
+### Checking Coding Plan model availability
+
+z.ai Coding Plan availability can change as new GLM vision models roll out. Run:
+
+```bash
+/glm-vision check
+```
+
+The command uses your existing zai provider API key and probes the known vision-model candidates. It reports which models are currently accepted by the Coding Plan API, so maintainers can quickly decide whether `MODELS` and this README need an update.
+
+To test a newly announced model before editing the extension, pass it explicitly:
+
+```bash
+/glm-vision check glm-new-vision-model
+```
+
+Maintainers can also run the upstream watcher outside Pi:
+
+```bash
+npm run check:upstream
+```
+
+That watcher reads official Z.AI sources, including `https://docs.z.ai/llms.txt`, the GLM-4.6V guide, and the GLM Coding Plan quick start. If `ZAI_API_KEY` is set, it also probes the Coding Plan API and fails when a newly accepted probe model is not yet in `MODELS` / this README. The included GitHub Actions workflow runs this weekly, on manual dispatch, and when model-related files change.
+
 ### Available vision models
 
 | Model | Context | Notes |
@@ -128,7 +154,7 @@ Fresh API calls show `cache miss` and are saved for later reuse when the cache i
 | `glm-4.6v` | 128K | Default. Best for detailed visual reasoning. |
 | `glm-4.6v-flash` | 128K | Lighter and faster for simple descriptions. |
 
-> `glm-5v-turbo` is not available on the z.ai Coding Plan. Use one of the models above.
+> **Note:** `glm-4.5v`, `glm-4.6v-flashx`, and `glm-5v-turbo` are tracked as probe candidates, but are not selectable until they are confirmed available on the z.ai Coding Plan. Only the models above are selectable by default.
 
 ## Configuration
 
