@@ -1,19 +1,59 @@
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as path from "node:path";
 import * as os from "node:os";
+import * as path from "node:path";
 
-// ── Config ────────────────────────────────────────────────────
+// -- Config -----------------------------------------------------
 export const getConfigPath = () => path.join(os.homedir(), ".pi", "glm-vision.json");
+export const getCachePath = () => path.join(os.homedir(), ".pi", "glm-vision-cache.json");
+
 const BASE_URL = "https://api.z.ai/api/coding/paas/v4";
 const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 500;
+const DEFAULT_CACHE_MAX_ENTRIES = 100;
+
+export const PRESET_PROMPTS = {
+  default:
+    "Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+  ocr:
+    "Transcribe all visible text exactly. Preserve line breaks, ordering, punctuation, and layout as much as possible. If text is unclear, mark it as [unclear]. Do not summarize unless needed to explain ambiguous layout.",
+  ui:
+    "Analyze this user interface screenshot. Describe the layout, visual hierarchy, controls, labels, states, navigation, and any notable UX issues. Include exact visible text when relevant.",
+  code:
+    "Extract and reproduce any visible code exactly. Identify the language if possible, preserve indentation, and mention file names, line numbers, errors, or UI context visible in the image.",
+  diagram:
+    "Explain this diagram. Identify nodes, labels, arrows, relationships, flow direction, legends, and any implied process. Summarize the core idea after describing the structure.",
+  brief:
+    "Briefly describe the image in 2-4 concise sentences. Include important text, UI state, code error, or diagram meaning if present.",
+} as const;
+
+export type PresetPromptMode = keyof typeof PRESET_PROMPTS;
+export type PromptMode = PresetPromptMode | "custom";
 
 export interface VisionConfig {
   model: string;
   prompt?: string;
+  promptMode?: PromptMode;
   enabled?: boolean;
+  cacheEnabled?: boolean;
+  cacheMaxEntries?: number;
+}
+
+interface CacheEntry {
+  createdAt: string;
+  description: string;
+  imageHash: string;
+  mediaType: string;
+  model: string;
+  promptHash: string;
+  promptMode: PromptMode;
+}
+
+interface CacheFile {
+  version: 1;
+  entries: Record<string, CacheEntry>;
 }
 
 interface LoadedConfig {
@@ -23,16 +63,84 @@ interface LoadedConfig {
 
 export const DEFAULT_CONFIG: VisionConfig = {
   model: "glm-4.6v",
-  prompt:
-    "Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+  promptMode: "default",
   enabled: true,
+  cacheEnabled: true,
+  cacheMaxEntries: DEFAULT_CACHE_MAX_ENTRIES,
 };
 
 export const MODELS = ["glm-4.6v", "glm-4.6v-flash"];
 export const CHECK_MODELS = [...MODELS, "glm-4.5v", "glm-4.6v-flashx", "glm-5v-turbo"];
+export const PRESET_NAMES = Object.keys(PRESET_PROMPTS) as PresetPromptMode[];
 
 function isVisionModel(value: unknown): value is string {
   return typeof value === "string" && MODELS.includes(value);
+}
+
+function isPresetPromptMode(value: unknown): value is PresetPromptMode {
+  return typeof value === "string" && PRESET_NAMES.includes(value as PresetPromptMode);
+}
+
+function isPromptMode(value: unknown): value is PromptMode {
+  return value === "custom" || isPresetPromptMode(value);
+}
+
+function normalizeConfig(raw: Partial<VisionConfig>, warnings: string[] = []): VisionConfig {
+  const config: VisionConfig = { ...DEFAULT_CONFIG };
+
+  if ("model" in raw) {
+    if (isVisionModel(raw.model)) {
+      config.model = raw.model;
+    } else if (raw.model !== undefined) {
+      warnings.push(
+        `Unknown model "${String(raw.model)}". Available: ${MODELS.join(", ")}. Using ${DEFAULT_CONFIG.model}.`,
+      );
+    }
+  }
+
+  if ("prompt" in raw) {
+    if (typeof raw.prompt === "string") {
+      config.prompt = raw.prompt;
+    } else if (raw.prompt !== undefined) {
+      warnings.push("prompt must be a string. Using the active preset prompt.");
+    }
+  }
+
+  if ("promptMode" in raw) {
+    if (isPromptMode(raw.promptMode)) {
+      config.promptMode = raw.promptMode;
+    } else if (raw.promptMode !== undefined) {
+      warnings.push(`Unknown promptMode "${String(raw.promptMode)}". Using default.`);
+    }
+  } else if (typeof raw.prompt === "string") {
+    config.promptMode = "custom";
+  }
+
+  if ("enabled" in raw) {
+    if (typeof raw.enabled === "boolean") {
+      config.enabled = raw.enabled;
+    } else if (raw.enabled !== undefined) {
+      warnings.push("enabled must be true or false. Using enabled=true.");
+    }
+  }
+
+  if ("cacheEnabled" in raw) {
+    if (typeof raw.cacheEnabled === "boolean") {
+      config.cacheEnabled = raw.cacheEnabled;
+    } else if (raw.cacheEnabled !== undefined) {
+      warnings.push("cacheEnabled must be true or false. Using cacheEnabled=true.");
+    }
+  }
+
+  if ("cacheMaxEntries" in raw) {
+    if (Number.isInteger(raw.cacheMaxEntries) && (raw.cacheMaxEntries || 0) > 0) {
+      config.cacheMaxEntries = raw.cacheMaxEntries;
+    } else if (raw.cacheMaxEntries !== undefined) {
+      warnings.push(`cacheMaxEntries must be a positive integer. Using ${DEFAULT_CACHE_MAX_ENTRIES}.`);
+    }
+  }
+
+  return config;
 }
 
 function loadConfigResult(configPath = getConfigPath()): LoadedConfig {
@@ -47,35 +155,8 @@ function loadConfigResult(configPath = getConfigPath()): LoadedConfig {
       };
     }
 
-    const config = { ...DEFAULT_CONFIG };
     const warnings: string[] = [];
-
-    if ("model" in raw) {
-      if (isVisionModel(raw.model)) {
-        config.model = raw.model;
-      } else {
-        warnings.push(
-          `Unknown model "${String(raw.model)}". Available: ${MODELS.join(", ")}. Using ${DEFAULT_CONFIG.model}.`,
-        );
-      }
-    }
-
-    if ("prompt" in raw) {
-      if (typeof raw.prompt === "string") {
-        config.prompt = raw.prompt;
-      } else {
-        warnings.push("prompt must be a string. Using the default prompt.");
-      }
-    }
-
-    if ("enabled" in raw) {
-      if (typeof raw.enabled === "boolean") {
-        config.enabled = raw.enabled;
-      } else {
-        warnings.push("enabled must be true or false. Using enabled=true.");
-      }
-    }
-
+    const config = normalizeConfig(raw, warnings);
     return {
       config,
       warning: warnings.length ? `Invalid ${configPath}: ${warnings.join(" ")}` : undefined,
@@ -98,10 +179,92 @@ export function loadConfig(configPath = getConfigPath()): VisionConfig {
 
 export function saveConfig(c: VisionConfig, configPath = getConfigPath()) {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
-  fs.writeFileSync(configPath, JSON.stringify(c, null, 2));
+  fs.writeFileSync(configPath, JSON.stringify(normalizeConfig(c), null, 2));
 }
 
-// ── Image extraction ──────────────────────────────────────────
+// -- Cache ------------------------------------------------------
+function loadCache(cachePath = getCachePath()): CacheFile {
+  try {
+    const raw = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
+    if (raw?.version === 1 && raw.entries && typeof raw.entries === "object" && !Array.isArray(raw.entries)) {
+      return raw;
+    }
+  } catch {
+    // Empty or invalid cache: start fresh.
+  }
+  return { version: 1, entries: {} };
+}
+
+function saveCache(cache: CacheFile, cachePath = getCachePath()) {
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+  fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
+}
+
+function hash(value: string | Buffer): string {
+  return crypto.createHash("sha256").update(value).digest("hex");
+}
+
+function getActivePrompt(c: VisionConfig): string {
+  if (c.promptMode === "custom") return c.prompt || PRESET_PROMPTS.default;
+  return PRESET_PROMPTS[(c.promptMode || "default") as PresetPromptMode] || PRESET_PROMPTS.default;
+}
+
+function getPromptLabel(c: VisionConfig): PromptMode {
+  if (c.promptMode === "custom") return "custom";
+  if (isPresetPromptMode(c.promptMode)) return c.promptMode;
+  return "default";
+}
+
+function makeCacheKey(img: ImageData, model: string, prompt: string): string {
+  const imageHash = hash(Buffer.from(img.base64, "base64"));
+  return hash(JSON.stringify({ imageHash, mediaType: img.mediaType, model, prompt }));
+}
+
+function makeCacheEntry(img: ImageData, model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
+  return {
+    createdAt: new Date().toISOString(),
+    description,
+    imageHash: hash(Buffer.from(img.base64, "base64")),
+    mediaType: img.mediaType,
+    model,
+    promptHash: hash(prompt),
+    promptMode: mode,
+  };
+}
+
+function pruneCache(cache: CacheFile, maxEntries: number) {
+  const entries = Object.entries(cache.entries).sort(
+    ([, a], [, b]) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
+  );
+  cache.entries = Object.fromEntries(entries.slice(0, maxEntries));
+}
+
+function cacheStats(cachePath = getCachePath()): { entries: number; path: string } {
+  return { entries: Object.keys(loadCache(cachePath).entries).length, path: cachePath };
+}
+
+function clearCache(cachePath = getCachePath()) {
+  saveCache({ version: 1, entries: {} }, cachePath);
+}
+
+function statusText(c: VisionConfig, configPath: string, cachePath: string, warning?: string): string {
+  const stats = cacheStats(cachePath);
+  const prompt = getActivePrompt(c);
+  return [
+    `glm-vision: ${c.enabled !== false ? "ON" : "OFF"}`,
+    `model: ${c.model}`,
+    `prompt: ${getPromptLabel(c)}`,
+    `cache: ${c.cacheEnabled !== false ? "ON" : "OFF"} (${stats.entries} entries, max ${c.cacheMaxEntries})`,
+    `config: ${configPath}`,
+    `cache file: ${stats.path}`,
+    warning ? `warning: ${warning}` : undefined,
+    `active prompt: ${prompt}`,
+  ]
+    .filter(Boolean)
+    .join("\n");
+}
+
+// -- Image extraction ------------------------------------------
 export interface ImageData {
   base64: string;
   mediaType: string;
@@ -127,7 +290,7 @@ export function hasImageContent(content: any[]): boolean {
   return content.some((b) => b.type === "image" || b.type === "image_url");
 }
 
-// ── Vision API call ───────────────────────────────────────────
+// -- Vision API call -------------------------------------------
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(resolve, ms);
@@ -247,27 +410,31 @@ export async function describeImage(
   const url = `${BASE_URL}/chat/completions`;
   const dataUrl = `data:${img.mediaType};base64,${img.base64}`;
 
-  const res = await fetchWithRetry(url, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${apiKey}`,
+  const res = await fetchWithRetry(
+    url,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        model,
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: prompt },
+              { type: "image_url", image_url: { url: dataUrl } },
+            ],
+          },
+        ],
+        max_tokens: 4096,
+      }),
+      signal,
     },
-    body: JSON.stringify({
-      model,
-      messages: [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: prompt },
-            { type: "image_url", image_url: { url: dataUrl } },
-          ],
-        },
-      ],
-      max_tokens: 4096,
-    }),
-    signal,
-  }, model);
+    model,
+  );
 
   if (!res.ok) {
     throw new Error(explainHttpError(res.status, await readErrorBody(res), model));
@@ -282,7 +449,9 @@ export async function describeImage(
 
   const description = json?.choices?.[0]?.message?.content;
   if (typeof description !== "string" || !description.trim()) {
-    throw new Error("Z.AI returned an empty response. The original image was left attached; try again or switch models with /glm-vision.");
+    throw new Error(
+      "Z.AI returned an empty response. The original image was left attached; try again or switch models with /glm-vision.",
+    );
   }
 
   return description;
@@ -290,6 +459,7 @@ export async function describeImage(
 
 export interface GlmVisionExtensionOptions {
   configPath?: string;
+  cachePath?: string;
 }
 
 async function checkModelAvailability(
@@ -331,44 +501,38 @@ async function checkModelAvailability(
   }
 }
 
-async function checkCodingPlanModels(
-  models: string[],
-  apiKey: string,
-  signal?: AbortSignal,
-): Promise<string> {
-  const results = await Promise.all(
-    models.map((model) => checkModelAvailability(model, apiKey, signal)),
-  );
+async function checkCodingPlanModels(models: string[], apiKey: string, signal?: AbortSignal): Promise<string> {
+  const results = await Promise.all(models.map((model) => checkModelAvailability(model, apiKey, signal)));
 
   return results
     .map((result) => {
-      const mark = result.ok ? "✓" : "✗";
+      const mark = result.ok ? "OK" : "NO";
       const status = result.status ? ` (${result.status})` : "";
       return `${mark} ${result.model}: ${result.message}${status}`;
     })
     .join("\n");
 }
 
-// ── Extension ─────────────────────────────────────────────────
+// -- Extension --------------------------------------------------
 export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}) {
   const configPath = options.configPath || getConfigPath();
+  const cachePath = options.cachePath || getCachePath();
 
   return function glmVisionExtension(pi: ExtensionAPI) {
     let { config, warning: configWarning } = loadConfigResult(configPath);
 
-    // Reload config on session start
+    // Reload config on session start.
     pi.on("session_start", async () => {
       const loaded = loadConfigResult(configPath);
       config = loaded.config;
       configWarning = loaded.warning;
     });
 
-    // Intercept read tool results containing images (zai provider only)
+    // Intercept read tool results containing images (zai provider only).
     pi.on("tool_result", async (event, ctx) => {
       if (event.toolName !== "read") return;
       if (config.enabled === false) return;
 
-      // Only activate when using zai provider
       const currentModel = ctx.model;
       if (!currentModel || currentModel.provider !== "zai") return;
 
@@ -378,6 +542,8 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       const img = extractImage(content);
       if (!img) return;
 
+      const originalImages = content.filter((b: any) => b.type === "image" || b.type === "image_url");
+
       if (configWarning) {
         return {
           content: [
@@ -385,17 +551,36 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
               type: "text",
               text: `[glm-vision config warning: ${configWarning}]`,
             },
-            ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
+            ...originalImages,
           ],
         };
       }
 
-      // Get API key from pi's model registry (same auth as main zai provider)
+      const prompt = getActivePrompt(config);
+      const promptMode = getPromptLabel(config);
+      const cacheKey = makeCacheKey(img, config.model, prompt);
+
+      if (config.cacheEnabled !== false) {
+        const cache = loadCache(cachePath);
+        const hit = cache.entries[cacheKey];
+        if (hit) {
+          return {
+            content: [
+              {
+                type: "text",
+                text: `[glm-vision: ${config.model}, prompt=${promptMode}, cache hit]\n\n${hit.description}`,
+              },
+            ],
+          };
+        }
+      }
+
+      // Get API key from pi's model registry (same auth as main zai provider).
       let apiKey: string | undefined;
       try {
         apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
       } catch {
-        /* fall through */
+        // fall through
       }
 
       if (!apiKey) {
@@ -403,26 +588,26 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           content: [
             {
               type: "text",
-              text: `[glm-vision error: no zai API key found. Authenticate or configure the zai provider in Pi, then retry the read.]`,
+              text: "[glm-vision error: no zai API key found. Authenticate or configure the zai provider in Pi, then retry the read.]",
             },
-            ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
+            ...originalImages,
           ],
         };
       }
 
       try {
-        const description = await describeImage(
-          img,
-          config.model,
-          config.prompt || DEFAULT_CONFIG.prompt!,
-          apiKey,
-          ctx.signal,
-        );
+        const description = await describeImage(img, config.model, prompt, apiKey, ctx.signal);
+        if (config.cacheEnabled !== false) {
+          const cache = loadCache(cachePath);
+          cache.entries[cacheKey] = makeCacheEntry(img, config.model, prompt, promptMode, description);
+          pruneCache(cache, config.cacheMaxEntries || DEFAULT_CACHE_MAX_ENTRIES);
+          saveCache(cache, cachePath);
+        }
         return {
           content: [
             {
               type: "text",
-              text: `[glm-vision: ${config.model}]\n\n${description}`,
+              text: `[glm-vision: ${config.model}, prompt=${promptMode}, cache miss]\n\n${description}`,
             },
           ],
         };
@@ -433,41 +618,55 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
               type: "text",
               text: `[glm-vision error: ${err.message}]`,
             },
-            ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
+            ...originalImages,
           ],
         };
       }
     });
 
-    // /glm-vision command
+    // /glm-vision command.
     pi.registerCommand("glm-vision", {
-      description: `View, switch, or check GLM vision models (${MODELS.join(", ")}). Use "on"/"off" to toggle.`,
+      description:
+        'Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Try "status", "ocr", "cache clear", "check".',
       getArgumentCompletions(prefix: string) {
-        const options = [...MODELS, "on", "off", "check"];
+        const options = [
+          "status",
+          "on",
+          "off",
+          "check",
+          "reset",
+          "prompt",
+          "cache on",
+          "cache off",
+          "cache clear",
+          "cache status",
+          "cache max ",
+          ...MODELS,
+          ...PRESET_NAMES,
+          ...PRESET_NAMES.map((m) => `mode ${m}`),
+        ];
         return options
           .filter((m) => m.startsWith(prefix))
           .map((m) => ({ value: m, label: m }));
       },
       handler: async (args, ctx) => {
         const trimmed = (args || "").trim();
+        const [command, ...rest] = trimmed.split(/\s+/).filter(Boolean);
 
-        if (!trimmed) {
-          const status = config.enabled !== false ? "ON" : "OFF";
-          ctx.ui.notify(
-            `glm-vision [${status}]: ${config.model}${configWarning ? ` (${configWarning})` : ""}`,
-            configWarning ? "warning" : "info",
-          );
+        if (!trimmed || command === "status") {
+          ctx.ui.notify(statusText(config, configPath, cachePath, configWarning), configWarning ? "warning" : "info");
           return;
         }
 
-        if (trimmed === "on") {
+        if (command === "on") {
           config.enabled = true;
           configWarning = undefined;
           saveConfig(config, configPath);
           ctx.ui.notify(`glm-vision: ON (${config.model})`, "info");
           return;
         }
-        if (trimmed === "off") {
+
+        if (command === "off") {
           config.enabled = false;
           configWarning = undefined;
           saveConfig(config, configPath);
@@ -475,12 +674,12 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           return;
         }
 
-        if (trimmed === "check" || trimmed.startsWith("check ")) {
+        if (command === "check") {
           let apiKey: string | undefined;
           try {
             apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
           } catch {
-            /* fall through */
+            // fall through
           }
 
           if (!apiKey) {
@@ -488,8 +687,8 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
             return;
           }
 
-          const customModels = trimmed
-            .slice("check".length)
+          const customModels = rest
+            .join(" ")
             .split(/[\s,]+/)
             .map((model) => model.trim())
             .filter(Boolean);
@@ -501,15 +700,108 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           return;
         }
 
+        if (command === "reset") {
+          config = { ...DEFAULT_CONFIG };
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify("glm-vision: reset to defaults", "info");
+          return;
+        }
+
+        if (command === "prompt") {
+          const nextPrompt = rest.join(" ").trim();
+          if (!nextPrompt) {
+            ctx.ui.notify(getActivePrompt(config), "info");
+            return;
+          }
+          config.prompt = nextPrompt;
+          config.promptMode = "custom";
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify("glm-vision prompt: custom prompt saved", "info");
+          return;
+        }
+
+        if (command === "mode") {
+          const mode = rest[0];
+          if (isPresetPromptMode(mode)) {
+            config.promptMode = mode;
+            config.prompt = undefined;
+            configWarning = undefined;
+            saveConfig(config, configPath);
+            ctx.ui.notify(`glm-vision prompt mode -> ${mode}`, "info");
+          } else {
+            ctx.ui.notify(`Unknown prompt mode. Available: ${PRESET_NAMES.join(", ")}`, "error");
+          }
+          return;
+        }
+
+        if (command === "cache") {
+          const subcommand = rest[0];
+          if (!subcommand || subcommand === "status") {
+            const stats = cacheStats(cachePath);
+            ctx.ui.notify(
+              `glm-vision cache: ${config.cacheEnabled !== false ? "ON" : "OFF"}, ${stats.entries} entries, max ${config.cacheMaxEntries}\n${stats.path}`,
+              "info",
+            );
+            return;
+          }
+          if (subcommand === "on") {
+            config.cacheEnabled = true;
+            configWarning = undefined;
+            saveConfig(config, configPath);
+            ctx.ui.notify("glm-vision cache: ON", "info");
+            return;
+          }
+          if (subcommand === "off") {
+            config.cacheEnabled = false;
+            configWarning = undefined;
+            saveConfig(config, configPath);
+            ctx.ui.notify("glm-vision cache: OFF", "info");
+            return;
+          }
+          if (subcommand === "clear") {
+            clearCache(cachePath);
+            ctx.ui.notify("glm-vision cache: cleared", "info");
+            return;
+          }
+          if (subcommand === "max") {
+            const maxEntries = Number(rest[1]);
+            if (Number.isInteger(maxEntries) && maxEntries > 0) {
+              config.cacheMaxEntries = maxEntries;
+              configWarning = undefined;
+              saveConfig(config, configPath);
+              const cache = loadCache(cachePath);
+              pruneCache(cache, maxEntries);
+              saveCache(cache, cachePath);
+              ctx.ui.notify(`glm-vision cache max -> ${maxEntries}`, "info");
+            } else {
+              ctx.ui.notify("Usage: /glm-vision cache max <positive integer>", "error");
+            }
+            return;
+          }
+          ctx.ui.notify('Unknown cache command. Try "cache status", "cache clear", "cache on", "cache off".', "error");
+          return;
+        }
+
+        if (isPresetPromptMode(command)) {
+          config.promptMode = command;
+          config.prompt = undefined;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify(`glm-vision prompt mode -> ${command}`, "info");
+          return;
+        }
+
         if (MODELS.includes(trimmed)) {
           config.model = trimmed;
           config.enabled = true;
           configWarning = undefined;
           saveConfig(config, configPath);
-          ctx.ui.notify(`glm-vision model → ${config.model}`, "info");
+          ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
         } else {
           ctx.ui.notify(
-            `Unknown model: ${trimmed}. Available: ${MODELS.join(", ")}`,
+            `Unknown command: ${trimmed}. Available models: ${MODELS.join(", ")}; prompt modes: ${PRESET_NAMES.join(", ")}`,
             "error",
           );
         }
