@@ -13,6 +13,7 @@ const REQUEST_TIMEOUT_MS = 30_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 500;
 const DEFAULT_CACHE_MAX_ENTRIES = 100;
+const DEFAULT_MAX_IMAGES = 4;
 
 export const PRESET_PROMPTS = {
   default:
@@ -39,6 +40,7 @@ export interface VisionConfig {
   enabled?: boolean;
   cacheEnabled?: boolean;
   cacheMaxEntries?: number;
+  maxImages?: number;
 }
 
 interface CacheEntry {
@@ -67,6 +69,7 @@ export const DEFAULT_CONFIG: VisionConfig = {
   enabled: true,
   cacheEnabled: true,
   cacheMaxEntries: DEFAULT_CACHE_MAX_ENTRIES,
+  maxImages: DEFAULT_MAX_IMAGES,
 };
 
 export const MODELS = ["glm-4.6v", "glm-4.6v-flash", "glm-4.6v-flashx", "glm-5v-turbo"];
@@ -137,6 +140,14 @@ function normalizeConfig(raw: Partial<VisionConfig>, warnings: string[] = []): V
       config.cacheMaxEntries = raw.cacheMaxEntries;
     } else if (raw.cacheMaxEntries !== undefined) {
       warnings.push(`cacheMaxEntries must be a positive integer. Using ${DEFAULT_CACHE_MAX_ENTRIES}.`);
+    }
+  }
+
+  if ("maxImages" in raw) {
+    const normalized = normalizeMaxImages(raw.maxImages);
+    config.maxImages = normalized;
+    if (raw.maxImages !== normalized) {
+      warnings.push(`maxImages must be a positive integer. Using ${DEFAULT_MAX_IMAGES}.`);
     }
   }
 
@@ -216,16 +227,18 @@ function getPromptLabel(c: VisionConfig): PromptMode {
 }
 
 function makeCacheKey(img: ImageData, model: string, prompt: string): string {
-  const imageHash = hash(Buffer.from(img.base64, "base64"));
-  return hash(JSON.stringify({ imageHash, mediaType: img.mediaType, model, prompt }));
+  const base64 = img.base64 || "";
+  const imageHash = hash(Buffer.from(base64, "base64"));
+  return hash(JSON.stringify({ imageHash, mediaType: img.mediaType, url: img.url, model, prompt }));
 }
 
 function makeCacheEntry(img: ImageData, model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
+  const base64 = img.base64 || "";
   return {
     createdAt: new Date().toISOString(),
     description,
-    imageHash: hash(Buffer.from(img.base64, "base64")),
-    mediaType: img.mediaType,
+    imageHash: hash(Buffer.from(base64, "base64")),
+    mediaType: img.mediaType || "unknown",
     model,
     promptHash: hash(prompt),
     promptMode: mode,
@@ -258,6 +271,7 @@ function statusText(c: VisionConfig, configPath: string, cachePath: string, warn
     `config: ${configPath}`,
     `cache file: ${stats.path}`,
     warning ? `warning: ${warning}` : undefined,
+    `maxImages: ${c.maxImages || DEFAULT_MAX_IMAGES}`,
     `active prompt: ${prompt}`,
   ]
     .filter(Boolean)
@@ -266,28 +280,99 @@ function statusText(c: VisionConfig, configPath: string, cachePath: string, warn
 
 // -- Image extraction ------------------------------------------
 export interface ImageData {
-  base64: string;
-  mediaType: string;
+  base64?: string;
+  mediaType?: string;
+  url?: string;
 }
 
-export function extractImage(content: any[]): ImageData | null {
-  for (const block of content) {
-    if (block.type === "image" && block.source?.data) {
-      return { base64: block.source.data, mediaType: block.source.mediaType || "image/png" };
-    }
-    if (block.type === "image" && block.data) {
-      return { base64: block.data, mediaType: block.mediaType || "image/png" };
-    }
-    if (block.type === "image_url" && block.image_url?.url?.startsWith("data:")) {
-      const match = block.image_url.url.match(/^data:(image\/\w+);base64,(.+)$/s);
+export interface LabeledImageData extends ImageData {
+  index: number;
+  label: string;
+}
+
+export function normalizeMaxImages(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_IMAGES;
+  return Math.max(1, Math.floor(value));
+}
+
+function extractImageFromBlock(block: any): ImageData | null {
+  if (block.type === "image" && block.source?.data) {
+    return {
+      base64: block.source.data,
+      mediaType: block.source.mediaType || block.source.media_type || "image/png",
+    };
+  }
+  if (block.type === "image" && block.data) {
+    return {
+      base64: block.data,
+      mediaType: block.mediaType || block.media_type || "image/png",
+    };
+  }
+  if (block.type === "image_url" && block.image_url?.url) {
+    const url = block.image_url.url;
+    if (url.startsWith("data:")) {
+      const match = url.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s);
       if (match) return { base64: match[2], mediaType: match[1] };
+      return null;
     }
+    return { url };
   }
   return null;
 }
 
+export function extractImage(content: any[]): ImageData | null {
+  for (const block of content) {
+    const img = extractImageFromBlock(block);
+    if (img) return img;
+  }
+  return null;
+}
+
+export function extractImages(content: any[], limit = Number.POSITIVE_INFINITY): LabeledImageData[] {
+  const images: LabeledImageData[] = [];
+  for (const block of content) {
+    const image = extractImageFromBlock(block);
+    if (!image) continue;
+    const index = images.length + 1;
+    images.push({ ...image, index, label: `Image ${index}` });
+    if (images.length >= limit) break;
+  }
+  return images;
+}
+
+export function countExtractableImages(content: any[]): number {
+  return extractImages(content).length;
+}
+
 export function hasImageContent(content: any[]): boolean {
   return content.some((b) => b.type === "image" || b.type === "image_url");
+}
+
+export function visionPrompt(prompt: string, images: LabeledImageData[], skippedCount = 0): string {
+  const labels = images.map((img) => img.label).join(", ");
+  const skipped = skippedCount > 0 ? ` ${skippedCount} additional image(s) were omitted due to the configured limit.` : "";
+  return `${prompt}\n\nYou are receiving ${images.length} image(s), in the same order Pi provided them: ${labels}. Use these exact labels in the answer. Give per-image observations first, then any cross-image comparison or combined conclusion.${skipped}`;
+}
+
+function imageUrl(img: ImageData): string {
+  if (img.url) return img.url;
+  return `data:${img.mediaType || "image/png"};base64,${img.base64 || ""}`;
+}
+
+export function buildVisionRequestContent(prompt: string, images: LabeledImageData[], skippedCount = 0): any[] {
+  const requestContent: any[] = [
+    { type: "text", text: visionPrompt(prompt, images, skippedCount) },
+  ];
+  for (const img of images) {
+    requestContent.push({ type: "text", text: `${img.label}:` });
+    requestContent.push({ type: "image_url", image_url: { url: imageUrl(img) } });
+  }
+  return requestContent;
+}
+
+export function formatVisionResult(model: string, description: string, imageCount: number, skippedCount = 0): string {
+  const skipped = skippedCount > 0 ? `, skipped: ${skippedCount}` : "";
+  return `[glm-vision: ${model} | images: ${imageCount}${skipped}]\n\n${description}`;
 }
 
 // -- Vision API call -------------------------------------------
@@ -407,8 +492,20 @@ export async function describeImage(
   apiKey: string,
   signal?: AbortSignal,
 ): Promise<string> {
+  const images: LabeledImageData[] = [{ ...img, index: 1, label: "Image 1" }];
+  return describeImages(images, model, prompt, apiKey, 0, signal);
+}
+
+export async function describeImages(
+  images: LabeledImageData[],
+  model: string,
+  prompt: string,
+  apiKey: string,
+  skippedCount = 0,
+  signal?: AbortSignal,
+): Promise<string> {
   const url = `${BASE_URL}/chat/completions`;
-  const dataUrl = `data:${img.mediaType};base64,${img.base64}`;
+  const requestContent = buildVisionRequestContent(prompt, images, skippedCount);
 
   const res = await fetchWithRetry(
     url,
@@ -423,10 +520,7 @@ export async function describeImage(
         messages: [
           {
             role: "user",
-            content: [
-              { type: "text", text: prompt },
-              { type: "image_url", image_url: { url: dataUrl } },
-            ],
+            content: requestContent,
           },
         ],
         max_tokens: 4096,
@@ -539,8 +633,11 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       const content = event.content as any[];
       if (!Array.isArray(content) || !hasImageContent(content)) return;
 
-      const img = extractImage(content);
-      if (!img) return;
+      const maxImages = normalizeMaxImages(config.maxImages);
+      const totalImages = countExtractableImages(content);
+      const images = extractImages(content, maxImages);
+      if (!images.length) return;
+      const skippedCount = Math.max(0, totalImages - images.length);
 
       const originalImages = content.filter((b: any) => b.type === "image" || b.type === "image_url");
 
@@ -558,7 +655,9 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
 
       const prompt = getActivePrompt(config);
       const promptMode = getPromptLabel(config);
-      const cacheKey = makeCacheKey(img, config.model, prompt);
+
+      // Cache: use first image hash as key (backward compatible for single-image)
+      const cacheKey = makeCacheKey(images[0], config.model, prompt);
 
       if (config.cacheEnabled !== false) {
         const cache = loadCache(cachePath);
@@ -596,10 +695,10 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       }
 
       try {
-        const description = await describeImage(img, config.model, prompt, apiKey, ctx.signal);
+        const description = await describeImages(images, config.model, prompt, apiKey, skippedCount, ctx.signal);
         if (config.cacheEnabled !== false) {
           const cache = loadCache(cachePath);
-          cache.entries[cacheKey] = makeCacheEntry(img, config.model, prompt, promptMode, description);
+          cache.entries[cacheKey] = makeCacheEntry(images[0], config.model, prompt, promptMode, description);
           pruneCache(cache, config.cacheMaxEntries || DEFAULT_CACHE_MAX_ENTRIES);
           saveCache(cache, cachePath);
         }
@@ -607,7 +706,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           content: [
             {
               type: "text",
-              text: `[glm-vision: ${config.model}, prompt=${promptMode}, cache miss]\n\n${description}`,
+              text: formatVisionResult(config.model, description, images.length, skippedCount),
             },
           ],
         };

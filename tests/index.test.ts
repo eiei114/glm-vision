@@ -121,7 +121,7 @@ describe("vision API", () => {
     const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
     const body = JSON.parse(requestInit.body as string);
     expect(body).toMatchObject({ model: "glm-4.6v", max_tokens: 4096 });
-    expect(body.messages[0].content[1].image_url.url).toBe("data:image/png;base64,abc");
+    expect(body.messages[0].content[2].image_url.url).toBe("data:image/png;base64,abc");
   });
 });
 
