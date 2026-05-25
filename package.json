@@ -27,7 +27,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/eiei114/glm-vision.git"
+    "url": "git+https://github.com/eiei114/glm-vision.git"
   },
   "homepage": "https://www.npmjs.com/package/glm-vision",
   "bugs": {
