@@ -72,8 +72,8 @@ export const DEFAULT_CONFIG: VisionConfig = {
   maxImages: DEFAULT_MAX_IMAGES,
 };
 
-export const MODELS = ["glm-4.6v", "glm-4.6v-flash"];
-export const CHECK_MODELS = [...MODELS, "glm-4.5v", "glm-4.6v-flashx", "glm-5v-turbo"];
+export const MODELS = ["glm-4.6v", "glm-4.6v-flash", "glm-4.6v-flashx", "glm-5v-turbo"];
+export const CHECK_MODELS = [...MODELS, "glm-4.5v"];
 export const PRESET_NAMES = Object.keys(PRESET_PROMPTS) as PresetPromptMode[];
 
 function isVisionModel(value: unknown): value is string {
