@@ -1,0 +1,126 @@
+name: Bug report
+description: Report a reproducible glm-vision problem
+title: "Bug: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting a bug. Please include enough environment and image-handling detail for maintainers to reproduce the issue.
+
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What happened? What did you expect to happen?
+      placeholder: glm-vision returned an empty response when reading a screenshot...
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      description: Provide the smallest sequence that reproduces the problem.
+      placeholder: |
+        1. Install glm-vision version ...
+        2. Select model ...
+        3. Run prompt ...
+        4. Read image file ...
+    validations:
+      required: true
+
+  - type: input
+    id: glm_vision_version
+    attributes:
+      label: glm-vision version
+      placeholder: 1.0.2
+    validations:
+      required: true
+
+  - type: input
+    id: pi_version
+    attributes:
+      label: Pi version
+      description: Run the relevant Pi version command or copy from your Pi installation details.
+      placeholder: pi version / package version
+    validations:
+      required: true
+
+  - type: dropdown
+    id: os
+    attributes:
+      label: Operating system
+      options:
+        - macOS
+        - Windows
+        - Linux
+        - Other
+    validations:
+      required: true
+
+  - type: input
+    id: active_model
+    attributes:
+      label: Active Pi model and provider
+      description: glm-vision only runs when the active provider is `zai`.
+      placeholder: zai / glm-5.1
+    validations:
+      required: true
+
+  - type: dropdown
+    id: vision_model
+    attributes:
+      label: glm-vision model
+      options:
+        - glm-4.6v
+        - glm-4.6v-flash
+        - Other / unknown
+    validations:
+      required: true
+
+  - type: input
+    id: image_type
+    attributes:
+      label: Image type and size
+      placeholder: PNG, 1920x1080, 1.4 MB
+    validations:
+      required: true
+
+  - type: textarea
+    id: prompt
+    attributes:
+      label: Prompt or command used
+      description: Include the user prompt, `/glm-vision` command, or read request that triggered the issue.
+      render: text
+    validations:
+      required: true
+
+  - type: textarea
+    id: error_output
+    attributes:
+      label: Error output
+      description: Paste the exact `[glm-vision error: ...]` text or relevant Pi output. Remove secrets and API keys.
+      render: text
+    validations:
+      required: false
+
+  - type: textarea
+    id: image_context
+    attributes:
+      label: Image context
+      description: Attach the image if shareable. If not, describe what it contains and whether it includes sensitive content.
+    validations:
+      required: false
+
+  - type: checkboxes
+    id: confirmations
+    attributes:
+      label: Checks
+      options:
+        - label: I confirmed the active provider is `zai`.
+          required: true
+        - label: I confirmed `/glm-vision` shows the extension is enabled.
+          required: true
+        - label: I removed secrets, API keys, and private data from logs.
+          required: true

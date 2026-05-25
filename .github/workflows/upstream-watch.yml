@@ -1,0 +1,32 @@
+name: Upstream Z.AI model watch
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Weekly: enough for model-list drift, low-noise for a small extension.
+    - cron: "23 3 * * 1"
+  push:
+    paths:
+      - "src/index.ts"
+      - "README.md"
+      - "scripts/check-upstream-models.mjs"
+      - ".github/workflows/upstream-watch.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  check-upstream:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check official docs and Coding Plan availability
+        run: npm run check:upstream
+        env:
+          # Optional. Without this secret, the job still watches official docs.
+          # With it, the job also fails when a probed model is accepted by the Coding Plan API
+          # but has not been added to MODELS/README yet.
+          ZAI_API_KEY: ${{ secrets.ZAI_API_KEY }}
