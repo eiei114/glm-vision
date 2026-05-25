@@ -87,9 +87,9 @@ describe("config", () => {
     saveConfig({ model: "glm-4.6v-flash", enabled: false }, configPath);
 
     expect(loadConfig(configPath)).toMatchObject({
+      ...DEFAULT_CONFIG,
       model: "glm-4.6v-flash",
       enabled: false,
-      prompt: DEFAULT_CONFIG.prompt,
     });
   });
 });
@@ -173,7 +173,10 @@ describe("extension behavior", () => {
     ]);
 
     await command.handler("", ctx);
-    expect(notify).toHaveBeenLastCalledWith("glm-vision [ON]: glm-4.6v", "info");
+    expect(notify.mock.lastCall?.[0]).toContain("glm-vision: ON");
+    expect(notify.mock.lastCall?.[0]).toContain("prompt: default");
+    expect(notify.mock.lastCall?.[0]).toContain("cache: ON");
+    expect(notify.mock.lastCall?.[1]).toBe("info");
 
     await command.handler("off", ctx);
     expect(loadConfig(configPath).enabled).toBe(false);
@@ -181,11 +184,20 @@ describe("extension behavior", () => {
 
     await command.handler("glm-4.6v-flash", ctx);
     expect(loadConfig(configPath)).toMatchObject({ model: "glm-4.6v-flash", enabled: true });
-    expect(notify).toHaveBeenLastCalledWith("glm-vision model → glm-4.6v-flash", "info");
+    expect(notify).toHaveBeenLastCalledWith("glm-vision model -> glm-4.6v-flash", "info");
+
+    await command.handler("ocr", ctx);
+    expect(loadConfig(configPath)).toMatchObject({ promptMode: "ocr" });
+    expect(loadConfig(configPath)).not.toHaveProperty("prompt");
+    expect(notify).toHaveBeenLastCalledWith("glm-vision prompt mode -> ocr", "info");
+
+    await command.handler("cache off", ctx);
+    expect(loadConfig(configPath).cacheEnabled).toBe(false);
+    expect(notify).toHaveBeenLastCalledWith("glm-vision cache: OFF", "info");
 
     await command.handler("unknown", ctx);
     expect(notify).toHaveBeenLastCalledWith(
-      "Unknown model: unknown. Available: glm-4.6v, glm-4.6v-flash",
+      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash; prompt modes: default, ocr, ui, code, diagram, brief",
       "error",
     );
   });

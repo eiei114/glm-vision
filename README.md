@@ -9,12 +9,15 @@ Pi extension that gives non-vision GLM models (z.ai) image understanding by rout
 When using a z.ai GLM text model (for example `glm-5.1`) and the `read` tool encounters an image file, glm-vision:
 
 1. Intercepts the image data from the `read` tool result.
-2. Sends it to a GLM vision model (`glm-4.6v` by default).
-3. Returns a text description to the main model.
+2. Builds a prompt from the active preset or custom prompt.
+3. Sends the image to a GLM vision model (`glm-4.6v` by default).
+4. Caches the response by image hash, prompt, and model.
+5. Returns a text description to the main model.
 
 ```text
-Image file -> read tool -> glm-vision -> GLM-4.6V
-                                      -> text description -> main GLM model
+Image file -> read tool -> glm-vision intercepts
+                       -> GLM-4.6V describes the image
+                       -> text description -> main GLM model
 ```
 
 This lets non-vision GLM models inspect screenshots, diagrams, scanned text, and error images through a vision-capable sibling model.
@@ -81,11 +84,42 @@ The screenshot shows a checkout form with a red validation message under the car
 
 | Command | Description |
 | --- | --- |
-| `/glm-vision` | Show current status and selected model. |
+| `/glm-vision` or `/glm-vision status` | Show status, model, prompt mode, cache stats, and active prompt. |
 | `/glm-vision on` | Enable image description. |
-| `/glm-vision off` | Disable glm-vision and forward images as-is. |
+| `/glm-vision off` | Disable image description and forward images as-is. |
 | `/glm-vision glm-4.6v` | Switch to GLM-4.6V (default). |
 | `/glm-vision glm-4.6v-flash` | Switch to GLM-4.6V Flash (lighter). |
+| `/glm-vision <preset>` | Switch prompt preset, e.g. `/glm-vision ocr`. |
+| `/glm-vision mode <preset>` | Switch prompt preset, e.g. `/glm-vision mode ui`. |
+| `/glm-vision prompt` | Show active prompt text. |
+| `/glm-vision prompt <text>` | Save and use a custom prompt. |
+| `/glm-vision reset` | Reset model, prompt mode, and cache settings to defaults. |
+| `/glm-vision cache status` | Show cache status and cache file path. |
+| `/glm-vision cache on` | Enable response cache. |
+| `/glm-vision cache off` | Disable response cache without deleting entries. |
+| `/glm-vision cache clear` | Clear cached responses. |
+| `/glm-vision cache max <n>` | Set maximum cache entries and prune older entries. |
+
+### Prompt presets
+
+| Preset | Best for | Behavior |
+| --- | --- | --- |
+| `default` | General image understanding | Detailed description with text, code, and UI handling. |
+| `ocr` | Screenshots, scans, documents | Exact text transcription with layout preservation. |
+| `ui` | App or website screenshots | Layout, visual hierarchy, controls, labels, states, UX notes. |
+| `code` | Code screenshots | Code extraction, language hints, indentation, visible errors. |
+| `diagram` | Flowcharts, architecture diagrams | Nodes, labels, arrows, relationships, process summary. |
+| `brief` | Quick context | 2-4 concise sentences with important visible details. |
+
+Cache keys include the image hash, active prompt text, and model. Switching presets or models naturally creates separate cache entries.
+
+Cache hits are visible in returned tool content:
+
+```text
+[glm-vision: glm-4.6v, prompt=ocr, cache hit]
+```
+
+Fresh API calls show `cache miss` and are saved for later reuse when the cache is enabled.
 
 ### Available vision models
 
@@ -96,7 +130,7 @@ The screenshot shows a checkout form with a red validation message under the car
 
 > `glm-5v-turbo` is not available on the z.ai Coding Plan. Use one of the models above.
 
-### Configuration
+## Configuration
 
 Config is stored at `~/.pi/glm-vision.json`:
 
@@ -104,16 +138,34 @@ Config is stored at `~/.pi/glm-vision.json`:
 {
   "model": "glm-4.6v",
   "enabled": true,
-  "prompt": "Describe this image in detail..."
+  "promptMode": "default",
+  "cacheEnabled": true,
+  "cacheMaxEntries": 100
 }
 ```
 
 Use a custom `prompt` when you want a consistent style for image summaries. For example, OCR-heavy workflows can ask the vision model to transcribe all visible text before describing layout.
 
+Custom prompts are stored as:
+
+```json
+{
+  "model": "glm-4.6v",
+  "enabled": true,
+  "promptMode": "custom",
+  "prompt": "Describe only visible chart data and axis labels.",
+  "cacheEnabled": true,
+  "cacheMaxEntries": 100
+}
+```
+
+Response cache stored at `~/.pi/glm-vision-cache.json`.
+
 If `~/.pi` or this config file is missing, glm-vision uses defaults. If the
-config JSON is invalid, not an object, has invalid field types, or names an
-unavailable vision model, glm-vision leaves the original image attached and
-returns an actionable config warning instead of crashing.
+config JSON is invalid, not an object, has invalid field types, names an
+unavailable vision model, or names an unavailable prompt mode, glm-vision leaves
+the original image attached and returns an actionable config warning instead of
+crashing.
 
 ### API failures and retry behavior
 
@@ -126,7 +178,6 @@ preserving the original image content.
 ## How authentication works
 
 glm-vision reuses the same API key that Pi uses for the `zai` provider. No additional API key setup is needed: if your z.ai model works in Pi, glm-vision works too.
-
 
 ## Usage scenarios
 
@@ -210,7 +261,7 @@ Fixes:
 - Switch to `/glm-vision glm-4.6v` for detailed reasoning.
 - Crop the image to the relevant area.
 - Increase contrast or resolution before reading the image.
-- Customize `~/.pi/glm-vision.json` with an OCR-focused prompt.
+- Customize `~/.pi/glm-vision.json` with an OCR-focused prompt or the `ocr` prompt preset.
 
 ### Image is forwarded instead of described
 
