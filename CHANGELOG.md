@@ -10,11 +10,22 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
-### Added
+## [1.2.0] - 2026-05-26
 
+### Added
+- Multi-image support with conflict resolution.
+- Upstream model watch command.
+- GLM vision Coding Plan check command.
+- Prompt presets and vision response cache.
 - Expanded README examples for UI screenshot review, OCR, diagram reading, and error-image diagnosis.
 - Troubleshooting guidance for model selection, z.ai authentication, incomplete OCR, and forwarded images.
 - Release process documentation and GitHub issue templates.
+- Trusted npm publishing CI.
+
+### Changed
+- Updated test expectations for glm-4.6v-flashx and glm-5v-turbo models.
+- Normalized npm repository URL.
+- Hardened GLM vision config and API error handling.
 
 ## [1.0.2] - 2026-05-20
 
