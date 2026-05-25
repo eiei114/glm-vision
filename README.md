@@ -121,6 +121,19 @@ Config stored at `~/.pi/glm-vision.json`:
 }
 ```
 
+If `~/.pi` or this config file is missing, glm-vision uses defaults. If the
+config JSON is invalid, not an object, has invalid field types, or names an
+unavailable vision model, glm-vision leaves the original image attached and
+returns an actionable config warning instead of crashing.
+
+### API failures and retry behavior
+
+Z.AI requests time out after 30 seconds. Transient failures (`408`, `409`,
+`425`, `429`, and `5xx`) are retried up to 3 total attempts with exponential
+backoff (`500ms`, then `1000ms`). Authentication, model-access, invalid JSON,
+and empty-response failures return clear `glm-vision error` messages while
+preserving the original image content.
+
 ## How authentication works
 
 glm-vision reuses the same API key that Pi uses for the zai provider. No additional API key setup is needed — if your zai model works in Pi, glm-vision works too.

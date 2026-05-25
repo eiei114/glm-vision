@@ -4,45 +4,110 @@ import * as path from "node:path";
 import * as os from "node:os";
 
 // ── Config ────────────────────────────────────────────────────
-const CONFIG_PATH = path.join(os.homedir(), ".pi", "glm-vision.json");
+export const getConfigPath = () => path.join(os.homedir(), ".pi", "glm-vision.json");
 const BASE_URL = "https://api.z.ai/api/coding/paas/v4";
+const REQUEST_TIMEOUT_MS = 30_000;
+const MAX_ATTEMPTS = 3;
+const RETRY_BASE_DELAY_MS = 500;
 
-interface VisionConfig {
+export interface VisionConfig {
   model: string;
   prompt?: string;
   enabled?: boolean;
 }
 
-const DEFAULT_CONFIG: VisionConfig = {
+interface LoadedConfig {
+  config: VisionConfig;
+  warning?: string;
+}
+
+export const DEFAULT_CONFIG: VisionConfig = {
   model: "glm-4.6v",
   prompt:
     "Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
   enabled: true,
 };
 
-const MODELS = ["glm-4.6v", "glm-4.6v-flash"];
-const CHECK_MODELS = [...MODELS, "glm-4.5v", "glm-4.6v-flashx", "glm-5v-turbo"];
+export const MODELS = ["glm-4.6v", "glm-4.6v-flash"];
+export const CHECK_MODELS = [...MODELS, "glm-4.5v", "glm-4.6v-flashx", "glm-5v-turbo"];
 
-function loadConfig(): VisionConfig {
+function isVisionModel(value: unknown): value is string {
+  return typeof value === "string" && MODELS.includes(value);
+}
+
+function loadConfigResult(configPath = getConfigPath()): LoadedConfig {
   try {
-    const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, "utf-8"));
-    return { ...DEFAULT_CONFIG, ...raw };
-  } catch {
-    return { ...DEFAULT_CONFIG };
+    const rawText = fs.readFileSync(configPath, "utf-8");
+    const raw = JSON.parse(rawText);
+
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+      return {
+        config: { ...DEFAULT_CONFIG },
+        warning: `Config ${configPath} must be a JSON object. Using defaults.`,
+      };
+    }
+
+    const config = { ...DEFAULT_CONFIG };
+    const warnings: string[] = [];
+
+    if ("model" in raw) {
+      if (isVisionModel(raw.model)) {
+        config.model = raw.model;
+      } else {
+        warnings.push(
+          `Unknown model "${String(raw.model)}". Available: ${MODELS.join(", ")}. Using ${DEFAULT_CONFIG.model}.`,
+        );
+      }
+    }
+
+    if ("prompt" in raw) {
+      if (typeof raw.prompt === "string") {
+        config.prompt = raw.prompt;
+      } else {
+        warnings.push("prompt must be a string. Using the default prompt.");
+      }
+    }
+
+    if ("enabled" in raw) {
+      if (typeof raw.enabled === "boolean") {
+        config.enabled = raw.enabled;
+      } else {
+        warnings.push("enabled must be true or false. Using enabled=true.");
+      }
+    }
+
+    return {
+      config,
+      warning: warnings.length ? `Invalid ${configPath}: ${warnings.join(" ")}` : undefined,
+    };
+  } catch (err: any) {
+    if (err?.code === "ENOENT") {
+      return { config: { ...DEFAULT_CONFIG } };
+    }
+
+    return {
+      config: { ...DEFAULT_CONFIG },
+      warning: `Could not read ${configPath}: ${err?.message || String(err)}. Using defaults.`,
+    };
   }
 }
 
-function saveConfig(c: VisionConfig) {
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(c, null, 2));
+export function loadConfig(configPath = getConfigPath()): VisionConfig {
+  return loadConfigResult(configPath).config;
+}
+
+export function saveConfig(c: VisionConfig, configPath = getConfigPath()) {
+  fs.mkdirSync(path.dirname(configPath), { recursive: true });
+  fs.writeFileSync(configPath, JSON.stringify(c, null, 2));
 }
 
 // ── Image extraction ──────────────────────────────────────────
-interface ImageData {
+export interface ImageData {
   base64: string;
   mediaType: string;
 }
 
-function extractImage(content: any[]): ImageData | null {
+export function extractImage(content: any[]): ImageData | null {
   for (const block of content) {
     if (block.type === "image" && block.source?.data) {
       return { base64: block.source.data, mediaType: block.source.mediaType || "image/png" };
@@ -58,12 +123,121 @@ function extractImage(content: any[]): ImageData | null {
   return null;
 }
 
-function hasImageContent(content: any[]): boolean {
+export function hasImageContent(content: any[]): boolean {
   return content.some((b) => b.type === "image" || b.type === "image_url");
 }
 
 // ── Vision API call ───────────────────────────────────────────
-async function describeImage(
+function sleep(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const timeout = setTimeout(resolve, ms);
+    if (!signal) return;
+
+    const onAbort = () => {
+      clearTimeout(timeout);
+      reject(new Error("request cancelled"));
+    };
+
+    if (signal.aborted) return onAbort();
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
+
+function createTimeoutSignal(parentSignal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(new Error("request timed out")), REQUEST_TIMEOUT_MS);
+
+  const onAbort = () => controller.abort(parentSignal?.reason || new Error("request cancelled"));
+  if (parentSignal) {
+    if (parentSignal.aborted) onAbort();
+    else parentSignal.addEventListener("abort", onAbort, { once: true });
+  }
+
+  return {
+    signal: controller.signal,
+    cleanup: () => {
+      clearTimeout(timeout);
+      parentSignal?.removeEventListener("abort", onAbort);
+    },
+  };
+}
+
+async function readErrorBody(res: Response): Promise<string> {
+  const text = await res.text().catch(() => "");
+  if (!text) return "";
+
+  try {
+    const json = JSON.parse(text);
+    return json?.error?.message || json?.message || text;
+  } catch {
+    return text;
+  }
+}
+
+function isRetryableStatus(status: number): boolean {
+  return status === 408 || status === 409 || status === 425 || status === 429 || status >= 500;
+}
+
+function explainHttpError(status: number, body: string, model: string): string {
+  const detail = body ? `: ${body.slice(0, 500)}` : "";
+
+  if (status === 401 || status === 403) {
+    return `Z.AI rejected the zai API key (HTTP ${status}). Reauthenticate or update the zai provider API key in Pi${detail}`;
+  }
+  if (status === 400 || status === 404) {
+    return `Z.AI rejected model "${model}" (HTTP ${status}). Use /glm-vision ${MODELS.join(" or ")}, and check your Coding Plan access${detail}`;
+  }
+  if (status === 429) {
+    return `Z.AI rate limited the request (HTTP 429). Try again later${detail}`;
+  }
+  if (status >= 500) {
+    return `Z.AI service error (HTTP ${status}). Retried automatically; try again later if it persists${detail}`;
+  }
+
+  return `Z.AI request failed (HTTP ${status})${detail}`;
+}
+
+function explainFetchError(err: any): string {
+  const message = err?.message || String(err);
+  if (err?.name === "AbortError" || /timed out/i.test(message)) {
+    return `Z.AI request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`;
+  }
+  if (/cancelled|aborted/i.test(message)) {
+    return "Z.AI request was cancelled";
+  }
+  return `Z.AI network request failed: ${message}`;
+}
+
+async function fetchWithRetry(url: string, init: RequestInit, model: string): Promise<Response> {
+  let lastError: string | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+    const { signal, cleanup } = createTimeoutSignal(init.signal || undefined);
+
+    try {
+      const res = await fetch(url, { ...init, signal });
+
+      if (res.ok || !isRetryableStatus(res.status) || attempt === MAX_ATTEMPTS) {
+        return res;
+      }
+
+      lastError = explainHttpError(res.status, await readErrorBody(res), model);
+    } catch (err: any) {
+      lastError = explainFetchError(err);
+      if (attempt === MAX_ATTEMPTS || /cancelled|aborted/i.test(lastError)) {
+        throw new Error(`${lastError} after ${attempt} attempt${attempt === 1 ? "" : "s"}.`);
+      }
+    } finally {
+      cleanup();
+    }
+
+    await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), init.signal || undefined);
+  }
+
+  throw new Error(lastError || "Z.AI request failed.");
+}
+
+export async function describeImage(
   img: ImageData,
   model: string,
   prompt: string,
@@ -73,7 +247,7 @@ async function describeImage(
   const url = `${BASE_URL}/chat/completions`;
   const dataUrl = `data:${img.mediaType};base64,${img.base64}`;
 
-  const res = await fetch(url, {
+  const res = await fetchWithRetry(url, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
@@ -93,15 +267,29 @@ async function describeImage(
       max_tokens: 4096,
     }),
     signal,
-  });
+  }, model);
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`${res.status} ${err}`);
+    throw new Error(explainHttpError(res.status, await readErrorBody(res), model));
   }
 
-  const json = (await res.json()) as any;
-  return json.choices?.[0]?.message?.content || "[glm-vision: empty response]";
+  let json: any;
+  try {
+    json = await res.json();
+  } catch (err: any) {
+    throw new Error(`Z.AI returned invalid JSON: ${err?.message || String(err)}`);
+  }
+
+  const description = json?.choices?.[0]?.message?.content;
+  if (typeof description !== "string" || !description.trim()) {
+    throw new Error("Z.AI returned an empty response. The original image was left attached; try again or switch models with /glm-vision.");
+  }
+
+  return description;
+}
+
+export interface GlmVisionExtensionOptions {
+  configPath?: string;
 }
 
 async function checkModelAvailability(
@@ -162,145 +350,172 @@ async function checkCodingPlanModels(
 }
 
 // ── Extension ─────────────────────────────────────────────────
-export default function (pi: ExtensionAPI) {
-  let config = loadConfig();
+export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}) {
+  const configPath = options.configPath || getConfigPath();
 
-  // Reload config on session start
-  pi.on("session_start", async () => {
-    config = loadConfig();
-  });
+  return function glmVisionExtension(pi: ExtensionAPI) {
+    let { config, warning: configWarning } = loadConfigResult(configPath);
 
-  // Intercept read tool results containing images (zai provider only)
-  pi.on("tool_result", async (event, ctx) => {
-    if (event.toolName !== "read") return;
-    if (config.enabled === false) return;
+    // Reload config on session start
+    pi.on("session_start", async () => {
+      const loaded = loadConfigResult(configPath);
+      config = loaded.config;
+      configWarning = loaded.warning;
+    });
 
-    // Only activate when using zai provider
-    const currentModel = ctx.model;
-    if (!currentModel || currentModel.provider !== "zai") return;
+    // Intercept read tool results containing images (zai provider only)
+    pi.on("tool_result", async (event, ctx) => {
+      if (event.toolName !== "read") return;
+      if (config.enabled === false) return;
 
-    const content = event.content as any[];
-    if (!Array.isArray(content) || !hasImageContent(content)) return;
+      // Only activate when using zai provider
+      const currentModel = ctx.model;
+      if (!currentModel || currentModel.provider !== "zai") return;
 
-    const img = extractImage(content);
-    if (!img) return;
+      const content = event.content as any[];
+      if (!Array.isArray(content) || !hasImageContent(content)) return;
 
-    // Get API key from pi's model registry (same auth as main zai provider)
-    let apiKey: string | undefined;
-    try {
-      apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
-    } catch {
-      /* fall through */
-    }
+      const img = extractImage(content);
+      if (!img) return;
 
-    if (!apiKey) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `[glm-vision error: no zai API key found. Check your zai authentication.]`,
-          },
-          ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
-        ],
-      };
-    }
-
-    try {
-      const description = await describeImage(
-        img,
-        config.model,
-        config.prompt || DEFAULT_CONFIG.prompt!,
-        apiKey,
-        ctx.signal,
-      );
-      return {
-        content: [
-          {
-            type: "text",
-            text: `[glm-vision: ${config.model}]\n\n${description}`,
-          },
-        ],
-      };
-    } catch (err: any) {
-      return {
-        content: [
-          {
-            type: "text",
-            text: `[glm-vision error: ${err.message}]`,
-          },
-          ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
-        ],
-      };
-    }
-  });
-
-  // /glm-vision command
-  pi.registerCommand("glm-vision", {
-    description: `View, switch, or check GLM vision models (${MODELS.join(", ")}). Use "on"/"off" to toggle.`,
-    getArgumentCompletions(prefix: string) {
-      const options = [...MODELS, "on", "off", "check"];
-      return options
-        .filter((m) => m.startsWith(prefix))
-        .map((m) => ({ value: m, label: m }));
-    },
-    handler: async (args, ctx) => {
-      const trimmed = (args || "").trim();
-
-      if (!trimmed) {
-        const status = config.enabled !== false ? "ON" : "OFF";
-        ctx.ui.notify(`glm-vision [${status}]: ${config.model}`, "info");
-        return;
+      if (configWarning) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `[glm-vision config warning: ${configWarning}]`,
+            },
+            ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
+          ],
+        };
       }
 
-      if (trimmed === "on") {
-        config.enabled = true;
-        saveConfig(config);
-        ctx.ui.notify(`glm-vision: ON (${config.model})`, "info");
-        return;
+      // Get API key from pi's model registry (same auth as main zai provider)
+      let apiKey: string | undefined;
+      try {
+        apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
+      } catch {
+        /* fall through */
       }
-      if (trimmed === "off") {
-        config.enabled = false;
-        saveConfig(config);
-        ctx.ui.notify("glm-vision: OFF", "info");
-        return;
-      }
-      if (trimmed === "check" || trimmed.startsWith("check ")) {
-        let apiKey: string | undefined;
-        try {
-          apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
-        } catch {
-          /* fall through */
-        }
 
-        if (!apiKey) {
-          ctx.ui.notify("glm-vision check: no zai API key found", "error");
+      if (!apiKey) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `[glm-vision error: no zai API key found. Authenticate or configure the zai provider in Pi, then retry the read.]`,
+            },
+            ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
+          ],
+        };
+      }
+
+      try {
+        const description = await describeImage(
+          img,
+          config.model,
+          config.prompt || DEFAULT_CONFIG.prompt!,
+          apiKey,
+          ctx.signal,
+        );
+        return {
+          content: [
+            {
+              type: "text",
+              text: `[glm-vision: ${config.model}]\n\n${description}`,
+            },
+          ],
+        };
+      } catch (err: any) {
+        return {
+          content: [
+            {
+              type: "text",
+              text: `[glm-vision error: ${err.message}]`,
+            },
+            ...content.filter((b: any) => b.type === "image" || b.type === "image_url"),
+          ],
+        };
+      }
+    });
+
+    // /glm-vision command
+    pi.registerCommand("glm-vision", {
+      description: `View, switch, or check GLM vision models (${MODELS.join(", ")}). Use "on"/"off" to toggle.`,
+      getArgumentCompletions(prefix: string) {
+        const options = [...MODELS, "on", "off", "check"];
+        return options
+          .filter((m) => m.startsWith(prefix))
+          .map((m) => ({ value: m, label: m }));
+      },
+      handler: async (args, ctx) => {
+        const trimmed = (args || "").trim();
+
+        if (!trimmed) {
+          const status = config.enabled !== false ? "ON" : "OFF";
+          ctx.ui.notify(
+            `glm-vision [${status}]: ${config.model}${configWarning ? ` (${configWarning})` : ""}`,
+            configWarning ? "warning" : "info",
+          );
           return;
         }
 
-        const customModels = trimmed
-          .slice("check".length)
-          .split(/[\s,]+/)
-          .map((model) => model.trim())
-          .filter(Boolean);
-        const modelsToCheck = customModels.length > 0 ? customModels : CHECK_MODELS;
+        if (trimmed === "on") {
+          config.enabled = true;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify(`glm-vision: ON (${config.model})`, "info");
+          return;
+        }
+        if (trimmed === "off") {
+          config.enabled = false;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify("glm-vision: OFF", "info");
+          return;
+        }
 
-        ctx.ui.notify("glm-vision check: probing z.ai Coding Plan models...", "info");
-        const report = await checkCodingPlanModels(modelsToCheck, apiKey, ctx.signal);
-        ctx.ui.notify(`glm-vision Coding Plan check\n${report}`, "info");
-        return;
-      }
+        if (trimmed === "check" || trimmed.startsWith("check ")) {
+          let apiKey: string | undefined;
+          try {
+            apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
+          } catch {
+            /* fall through */
+          }
 
-      if (MODELS.includes(trimmed)) {
-        config.model = trimmed;
-        config.enabled = true;
-        saveConfig(config);
-        ctx.ui.notify(`glm-vision model → ${config.model}`, "info");
-      } else {
-        ctx.ui.notify(
-          `Unknown model: ${trimmed}. Available: ${MODELS.join(", ")}`,
-          "error",
-        );
-      }
-    },
-  });
+          if (!apiKey) {
+            ctx.ui.notify("glm-vision check: no zai API key found", "error");
+            return;
+          }
+
+          const customModels = trimmed
+            .slice("check".length)
+            .split(/[\s,]+/)
+            .map((model) => model.trim())
+            .filter(Boolean);
+          const modelsToCheck = customModels.length > 0 ? customModels : CHECK_MODELS;
+
+          ctx.ui.notify("glm-vision check: probing z.ai Coding Plan models...", "info");
+          const report = await checkCodingPlanModels(modelsToCheck, apiKey, ctx.signal);
+          ctx.ui.notify(`glm-vision Coding Plan check\n${report}`, "info");
+          return;
+        }
+
+        if (MODELS.includes(trimmed)) {
+          config.model = trimmed;
+          config.enabled = true;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify(`glm-vision model → ${config.model}`, "info");
+        } else {
+          ctx.ui.notify(
+            `Unknown model: ${trimmed}. Available: ${MODELS.join(", ")}`,
+            "error",
+          );
+        }
+      },
+    });
+  };
 }
+
+export default createGlmVisionExtension();
