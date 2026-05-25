@@ -170,6 +170,7 @@ describe("extension behavior", () => {
 
     expect(command.getArgumentCompletions("glm-4.6v-f")).toEqual([
       { value: "glm-4.6v-flash", label: "glm-4.6v-flash" },
+      { value: "glm-4.6v-flashx", label: "glm-4.6v-flashx" },
     ]);
 
     await command.handler("", ctx);
@@ -197,7 +198,7 @@ describe("extension behavior", () => {
 
     await command.handler("unknown", ctx);
     expect(notify).toHaveBeenLastCalledWith(
-      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash; prompt modes: default, ocr, ui, code, diagram, brief",
+      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash, glm-4.6v-flashx, glm-5v-turbo; prompt modes: default, ocr, ui, code, diagram, brief",
       "error",
     );
   });
