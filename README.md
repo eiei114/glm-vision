@@ -1,338 +1,152 @@
 # glm-vision
 
-[![npm](https://img.shields.io/npm/v/glm-vision)](https://www.npmjs.com/package/glm-vision) [![GitHub](https://img.shields.io/badge/GitHub-eiei114%2Fglm--vision-blue)](https://github.com/eiei114/glm-vision)
+[![CI](https://github.com/eiei114/glm-vision/actions/workflows/ci.yml/badge.svg)](https://github.com/eiei114/glm-vision/actions/workflows/ci.yml)
+[![Publish](https://github.com/eiei114/glm-vision/actions/workflows/publish.yml/badge.svg)](https://github.com/eiei114/glm-vision/actions/workflows/publish.yml)
+[![npm version](https://img.shields.io/npm/v/glm-vision.svg)](https://www.npmjs.com/package/glm-vision)
+[![npm downloads](https://img.shields.io/npm/dm/glm-vision.svg)](https://www.npmjs.com/package/glm-vision)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Pi package](https://img.shields.io/badge/pi-package-purple.svg)](https://pi.dev/packages)
+[![Trusted Publishing](https://img.shields.io/badge/npm-Trusted%20Publishing-blue.svg)](docs/release.md)
 
-Pi extension that gives non-vision GLM models (z.ai) image understanding by routing images through a GLM vision model.
+> Pi extension that gives non-vision GLM models (z.ai) image understanding by routing images through a GLM vision model.
 
-## How it works
+## What this is
 
-When using a z.ai GLM text model (for example `glm-5.1`) and the `read` tool encounters one or more image files, glm-vision:
+glm-vision intercepts Pi `read` tool results that include images when you are using the `zai` provider. It sends those images to a GLM vision model (default: `glm-4.6v`) and returns a combined text description to the active text-only GLM model.
 
-1. Intercepts the image data in the order Pi provided it.
-2. Builds a prompt from the active preset or custom prompt.
-3. Sends the images together to a GLM vision model (`glm-4.6v` by default).
-4. Caches the response by image hash, prompt, and model.
-5. Returns a combined text description to the main model.
+## Features
 
-```text
-Image file(s) -> read tool -> [glm-vision intercepts]
-                              -> GLM-4.6V describes Image 1, Image 2, ...
-                              -> Combined text description -> main GLM model
-```
+- Automatic image interception for z.ai GLM text models
+- Ordered multi-image support with per-image + combined summaries
+- Prompt presets for OCR, UI, diagrams, and code, plus custom prompts
+- Response cache keyed by image hash, prompt, and model
+- Safe fallback behavior that preserves original images on error
 
-This lets non-vision GLM models inspect screenshots, diagrams, scanned text, and error images through a vision-capable sibling model.
+## Install
 
-## Multiple images
-
-When a tool result contains multiple images, glm-vision sends them in their original order and asks the vision model to refer to them as `Image 1`, `Image 2`, and so on. The answer includes per-image observations plus any cross-image comparison or combined conclusion the vision model can infer.
-
-Single-image behavior is backward compatible: one image is still described as a normal vision result, now with `images: 1` in the result header.
-
-### Limits and fallback behavior
-
-- `maxImages` controls how many images are sent in one vision request. Default: `4`.
-- If a tool result contains more than `maxImages` extractable images, glm-vision sends the first `maxImages` in order and notes the skipped count in the prompt/result header.
-- If no extractable image data is present, glm-vision leaves the tool result unchanged.
-- If authentication is missing or the vision request fails, glm-vision returns an error text and preserves the original image blocks so Pi can continue with the normal fallback path.
-
-## Requirements
-
-- A [z.ai](https://z.ai) account with Coding Plan access.
-- Pi with the `zai` provider configured and authenticated.
-- A z.ai model selected in Pi when reading images. glm-vision is inactive for non-`zai` providers.
-
-## Installation
-
-### Via npm
+Install the published npm package with Pi:
 
 ```bash
 pi install npm:glm-vision
 ```
 
-Or add to `.pi/settings.json`:
+Pin a specific version when you want reproducible installs:
 
-```json
-{
-  "packages": ["npm:glm-vision"]
-}
+```bash
+pi install npm:glm-vision@1.2.1
 ```
 
-### From GitHub
+Install into the current project instead of your user Pi settings:
+
+```bash
+pi install npm:glm-vision -l
+```
+
+Or install from GitHub:
 
 ```bash
 pi install git:github.com/eiei114/glm-vision
 ```
 
-Or add to `.pi/settings.json`:
+Try it without permanently installing:
 
-```json
-{
-  "packages": ["git:github.com/eiei114/glm-vision"]
-}
+```bash
+pi -e npm:glm-vision
 ```
 
-## Usage
+## Quick start
 
-No setup is required after installation. glm-vision runs automatically when all of these are true:
+After installing, start a Pi session (or run locally with `pi -e .`) and confirm the extension loaded:
 
-- The active Pi model uses the `zai` provider.
-- The `read` tool returns image content.
-- glm-vision is enabled.
+```bash
+/glm-vision
+```
 
-Example prompt:
+Then ask Pi to read an image:
 
 ```text
 Read ./screenshots/checkout-error.png and explain what is wrong with this UI.
 ```
 
-glm-vision replaces the raw image result with a text description such as:
+## Usage notes (summary)
 
-```text
-[glm-vision: glm-4.6v]
+- **Vision models:** uses the `zai` provider and defaults to `glm-4.6v`. See the full list and availability checks in [`docs/usage.md`](docs/usage.md).
+- **Multiple images:** images are sent in their original order and referenced as `Image 1`, `Image 2`, and so on.
+- **Limits:** `maxImages` defaults to `4`. If more images are present, the first `maxImages` are described and the remainder are skipped.
+- **Fallback behavior:** if no image data is available or the vision request fails, glm-vision returns an error message while preserving the original image blocks so Pi can continue its fallback path.
 
-The screenshot shows a checkout form with a red validation message under the card number field...
-```
-
-### Commands
+Command examples:
 
 | Command | Description |
 | --- | --- |
-| `/glm-vision` or `/glm-vision status` | Show status, model, prompt mode, cache stats, and active prompt. |
+| `/glm-vision` | Show status, model, prompt mode, and cache stats. |
 | `/glm-vision on` | Enable image description. |
-| `/glm-vision off` | Disable image description and forward images as-is. |
-| `/glm-vision check` | Probe z.ai Coding Plan availability for known vision models. |
-| `/glm-vision check <model>` | Probe a new candidate model before adding it. |
-| `/glm-vision glm-4.6v` | Switch to GLM-4.6V (default). |
-| `/glm-vision glm-4.6v-flash` | Switch to GLM-4.6V Flash (lighter). |
-| `/glm-vision glm-4.6v-flashx` | Switch to GLM-4.6V FlashX (lightweight paid tier). |
-| `/glm-vision glm-5v-turbo` | Switch to GLM-5V-Turbo (multimodal coding model). |
-| `/glm-vision <preset>` | Switch prompt preset, e.g. `/glm-vision ocr`. |
-| `/glm-vision mode <preset>` | Switch prompt preset, e.g. `/glm-vision mode ui`. |
-| `/glm-vision prompt` | Show active prompt text. |
-| `/glm-vision prompt <text>` | Save and use a custom prompt. |
-| `/glm-vision reset` | Reset model, prompt mode, and cache settings to defaults. |
-| `/glm-vision cache status` | Show cache status and cache file path. |
-| `/glm-vision cache on` | Enable response cache. |
-| `/glm-vision cache off` | Disable response cache without deleting entries. |
-| `/glm-vision cache clear` | Clear cached responses. |
-| `/glm-vision cache max <n>` | Set maximum cache entries and prune older entries. |
+| `/glm-vision off` | Disable image description. |
+| `/glm-vision glm-4.6v` | Switch to the default vision model. |
+| `/glm-vision mode ocr` | Switch to the OCR prompt preset. |
+| `/glm-vision cache status` | Show cache status. |
 
-### Prompt presets
+More details, including presets, configuration, and troubleshooting, live in [`docs/usage.md`](docs/usage.md).
 
-| Preset | Best for | Behavior |
-| --- | --- | --- |
-| `default` | General image understanding | Detailed description with text, code, and UI handling. |
-| `ocr` | Screenshots, scans, documents | Exact text transcription with layout preservation. |
-| `ui` | App or website screenshots | Layout, visual hierarchy, controls, labels, states, UX notes. |
-| `code` | Code screenshots | Code extraction, language hints, indentation, visible errors. |
-| `diagram` | Flowcharts, architecture diagrams | Nodes, labels, arrows, relationships, process summary. |
-| `brief` | Quick context | 2-4 concise sentences with important visible details. |
+## Package contents
 
-Cache keys include the image hash, active prompt text, and model. Switching presets or models naturally creates separate cache entries.
+| Path | Purpose |
+| --- | --- |
+| `src/` | Pi extension entrypoint (`src/index.ts`) |
+| `docs/` | Usage, release, and template docs |
+| `scripts/` | Upstream model watcher utilities |
+| `tests/` | Vitest coverage for core behavior |
+| `.github/workflows/` | CI, publish, auto-release, upstream watch |
 
-Cache hits are visible in returned tool content:
-
-```text
-[glm-vision: glm-4.6v, prompt=ocr, cache hit]
-```
-
-Fresh API calls show `cache miss` and are saved for later reuse when the cache is enabled.
-
-### Checking Coding Plan model availability
-
-z.ai Coding Plan availability can change as new GLM vision models roll out. Run:
+## Development
 
 ```bash
-/glm-vision check
+npm install
+npm run lint
+npm run typecheck
+npm test
+npm run validate:package
 ```
 
-The command uses your existing zai provider API key and probes the known vision-model candidates. It reports which models are currently accepted by the Coding Plan API, so maintainers can quickly decide whether `MODELS` and this README need an update.
-
-To test a newly announced model before editing the extension, pass it explicitly:
-
-```bash
-/glm-vision check glm-new-vision-model
-```
-
-Maintainers can also run the upstream watcher outside Pi:
+Optional upstream model checks:
 
 ```bash
 npm run check:upstream
 ```
 
-That watcher reads official Z.AI sources, including `https://docs.z.ai/llms.txt`, the GLM-4.6V guide, and the GLM Coding Plan quick start. If `ZAI_API_KEY` is set, it also probes the Coding Plan API and fails when a newly accepted probe model is not yet in `MODELS` / this README. The included GitHub Actions workflow runs this weekly, on manual dispatch, and when model-related files change.
+## Release
 
-### Available vision models
+This package uses npm Trusted Publishing (OIDC) via GitHub Actions.
 
-| Model | Context | Notes |
-| --- | --- | --- |
-| `glm-4.6v` | 128K | Default. Visual reasoning + tool calling. |
-| `glm-4.6v-flash` | 128K | Lighter and faster for simple descriptions. |
-| `glm-4.6v-flashx` | 128K | Lightweight, faster paid option. |
-| `glm-5v-turbo` | 200K | Multimodal coding model for harder UI/code vision tasks. |
-
-> **Note:** `glm-4.5v` is tracked as a probe candidate but not selectable until confirmed available on the z.ai Coding Plan.
-
-### Direct API vs Vision MCP Server
-
-glm-vision keeps using the direct Z.AI HTTP API by default. That is the best fit for this package because it automatically intercepts Pi `read` results and returns a text description to the active GLM model without requiring the user to call a separate tool.
-
-Z.AI also provides an official [Vision MCP Server](https://docs.z.ai/devpack/mcp/vision-mcp-server) for MCP-compatible clients. It is useful when you want specialized tools such as OCR, UI screenshot analysis, technical diagram understanding, UI diff checks, image analysis, or video analysis. Use it alongside glm-vision when your client already supports MCP and you prefer explicit vision tools. Do not treat it as a replacement for glm-vision's automatic image-read interception.
-
-See [`docs/decisions/0001-vision-mcp-and-model-selection.md`](docs/decisions/0001-vision-mcp-and-model-selection.md) for the decision record.
-
-## Configuration
-
-Config is stored at `~/.pi/glm-vision.json`:
-
-```json
-{
-  "model": "glm-4.6v",
-  "enabled": true,
-  "promptMode": "default",
-  "cacheEnabled": true,
-  "cacheMaxEntries": 100,
-  "maxImages": 4
-}
+```bash
+npm version patch
+git push origin HEAD
 ```
 
-Use a custom `prompt` when you want a consistent style for image summaries. For example, OCR-heavy workflows can ask the vision model to transcribe all visible text before describing layout.
+See [`docs/release.md`](docs/release.md) and [`RELEASE.md`](RELEASE.md) for the full maintainer checklist.
 
-Custom prompts are stored as:
+## Template checklist
 
-```json
-{
-  "model": "glm-4.6v",
-  "enabled": true,
-  "promptMode": "custom",
-  "prompt": "Describe only visible chart data and axis labels.",
-  "cacheEnabled": true,
-  "cacheMaxEntries": 100
-}
-```
+Follow [`docs/template-checklist.md`](docs/template-checklist.md) after updates that should stay aligned with the Pi extension template.
 
-Response cache stored at `~/.pi/glm-vision-cache.json`.
+More docs:
 
-If `~/.pi` or this config file is missing, glm-vision uses defaults. If the
-config JSON is invalid, not an object, has invalid field types, names an
-unavailable vision model, or names an unavailable prompt mode, glm-vision leaves
-the original image attached and returns an actionable config warning instead of
-crashing.
+- [`docs/typescript.md`](docs/typescript.md)
+- [`docs/examples.md`](docs/examples.md)
+- [`docs/github-template.md`](docs/github-template.md)
+- [`docs/repository-settings.md`](docs/repository-settings.md)
 
-### API failures and retry behavior
+## Security
 
-Z.AI requests time out after 30 seconds. Transient failures (`408`, `409`,
-`425`, `429`, and `5xx`) are retried up to 3 total attempts with exponential
-backoff (`500ms`, then `1000ms`). Authentication, model-access, invalid JSON,
-and empty-response failures return clear `glm-vision error` messages while
-preserving the original image content.
+Pi packages can execute code with your local permissions. Review extensions before installing third-party packages.
 
-## How authentication works
+For vulnerability reporting, see [`SECURITY.md`](SECURITY.md).
 
-glm-vision reuses the same API key that Pi uses for the `zai` provider. No additional API key setup is needed: if your z.ai model works in Pi, glm-vision works too.
+## Links
 
-## Usage scenarios
-
-### UI screenshot review
-
-Use when reviewing visual regressions, app states, design implementation, or accessibility issues.
-
-```text
-Read ./screenshots/settings-page.png. Describe the layout, visible controls, error states, and anything that looks inconsistent with a modern settings page.
-```
-
-Good follow-up prompts:
-
-- "Compare the described UI with our expected settings flow."
-- "List likely CSS or component bugs from the screenshot."
-- "Suggest regression tests that would catch this state."
-
-### OCR and text extraction
-
-Use when an image contains logs, scanned docs, terminal output, PDFs rendered as screenshots, or handwritten notes.
-
-```text
-Read ./captures/install-log.png. Transcribe all visible text exactly, then summarize the failure.
-```
-
-Tips:
-
-- Ask for exact transcription first when accuracy matters.
-- Use `glm-4.6v` instead of flash for dense text.
-- Crop noisy screenshots before reading if the key text is small.
-
-### Diagram reading
-
-Use when an image contains architecture diagrams, flowcharts, UML, database schemas, or whiteboards.
-
-```text
-Read ./docs/auth-flow.png. Convert the diagram into a numbered sequence and call out every system boundary.
-```
-
-Good follow-up prompts:
-
-- "Turn this into Mermaid."
-- "Identify missing failure paths."
-- "Map each box in the diagram to files in this repo."
-
-### Error-image diagnosis
-
-Use when a bug report only includes a screenshot of an error, stack trace, browser console, or broken screen.
-
-```text
-Read ./bug-reports/payment-error.jpg. Extract the exact error message, identify the failing area, and suggest the first three debugging steps.
-```
-
-Tips:
-
-- Include surrounding code or logs in the same conversation after reading the image.
-- Ask the model to separate observed facts from inferred causes.
-- Keep original images attached to issues so maintainers can verify the generated description.
-
-## Troubleshooting
-
-### glm-vision does not run
-
-- Confirm the active Pi model uses the `zai` provider.
-- Run `/glm-vision` and confirm the status is `ON`.
-- Confirm the file is read through the `read` tool and contains supported image data.
-- Restart the Pi session after installing or changing packages.
-
-### `no zai API key found`
-
-glm-vision reuses the same API key that Pi uses for the `zai` provider. If your z.ai model works in Pi, glm-vision should work too.
-
-Fixes:
-
-1. Re-authenticate or reconfigure the `zai` provider in Pi.
-2. Start a new Pi session.
-3. Run `/glm-vision` to confirm the extension loaded.
-
-### Vision response is incomplete or misses text
-
-- Switch to `/glm-vision glm-4.6v` for detailed reasoning.
-- Crop the image to the relevant area.
-- Increase contrast or resolution before reading the image.
-- Customize `~/.pi/glm-vision.json` with an OCR-focused prompt or the `ocr` prompt preset.
-
-### Image is forwarded instead of described
-
-This can happen when glm-vision is disabled, the active provider is not `zai`, the image format is not represented as supported image content, or the vision API request fails. Error responses include the original image content when possible so the main model can still proceed.
-
-### Vision API returns an error
-
-- Check z.ai plan access for `glm-4.6v` or `glm-4.6v-flash`.
-- Try the other model with `/glm-vision glm-4.6v-flash` or `/glm-vision glm-4.6v`.
-- Retry with a smaller or cropped image.
-- Include the exact `[glm-vision error: ...]` text when filing a bug.
-
-## Release operations
-
-Maintainer release steps, semantic versioning policy, and release note template live in [RELEASE.md](./RELEASE.md). User-visible changes are tracked in [CHANGELOG.md](./CHANGELOG.md).
-
-## Contributing
-
-Use the GitHub issue templates for bug reports and feature requests. Bug reports should include Pi version, package version, OS, selected z.ai model, image type, reproduction steps, and any `[glm-vision error: ...]` output.
+- npm: https://www.npmjs.com/package/glm-vision
+- GitHub: https://github.com/eiei114/glm-vision
+- Issues: https://github.com/eiei114/glm-vision/issues
 
 ## License
 
