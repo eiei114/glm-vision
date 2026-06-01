@@ -10,6 +10,12 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+## [1.2.2] - 2026-06-02
+
+### Fixed
+
+- Dispatch npm publishing explicitly after the auto-release workflow creates a tag and GitHub Release.
+
 ## [1.2.0] - 2026-05-26
 
 ### Added
