@@ -76,6 +76,12 @@ export const MODELS = ["glm-4.6v", "glm-4.6v-flash", "glm-4.6v-flashx", "glm-5v-
 export const CHECK_MODELS = [...MODELS, "glm-4.5v"];
 export const PRESET_NAMES = Object.keys(PRESET_PROMPTS) as PresetPromptMode[];
 
+/**
+ * Mapping of flat colon-style Pi commands (e.g. `/glm-vision:status`) to their
+ * corresponding slash-command arguments and human-readable descriptions.
+ * Used to register individual Pi commands that delegate to the unified
+ * `handleGlmVisionCommand` handler.
+ */
 const COLON_COMMAND_ALIASES = [
   { name: "glm-vision:status", command: "status", description: "show status, model, prompt mode, and cache stats" },
   { name: "glm-vision:on", command: "on", description: "enable image description" },
@@ -745,6 +751,14 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       }
     });
 
+    /**
+     * Unified handler for all `/glm-vision` sub-commands (status, on, off,
+     * check, reset, prompt, mode, cache, model switching, and prompt presets).
+     *
+     * @param args - Raw argument string after the command name (e.g. `"status"`, `"cache on"`, a model name).
+     * @param ctx  - Pi command context providing `ui.notify` for user feedback,
+     *               `modelRegistry` for API-key lookup, and `signal` for abort support.
+     */
     const handleGlmVisionCommand = async (args: string, ctx: any) => {
       const trimmed = args.trim();
       const [command, ...rest] = trimmed.split(/\s+/).filter(Boolean);
