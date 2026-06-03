@@ -5,7 +5,9 @@ import * as os from "node:os";
 import * as path from "node:path";
 
 // -- Config -----------------------------------------------------
+/** Default path for the glm-vision user config file (`~/.pi/glm-vision.json`). */
 export const getConfigPath = () => path.join(os.homedir(), ".pi", "glm-vision.json");
+/** Default path for the glm-vision response cache file (`~/.pi/glm-vision-cache.json`). */
 export const getCachePath = () => path.join(os.homedir(), ".pi", "glm-vision-cache.json");
 
 const BASE_URL = "https://api.z.ai/api/coding/paas/v4";
@@ -15,6 +17,7 @@ const RETRY_BASE_DELAY_MS = 500;
 const DEFAULT_CACHE_MAX_ENTRIES = 100;
 const DEFAULT_MAX_IMAGES = 4;
 
+/** Built-in prompt presets selectable via `/glm-vision:<preset>` commands. */
 export const PRESET_PROMPTS = {
   default:
     "Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
@@ -63,6 +66,7 @@ interface LoadedConfig {
   warning?: string;
 }
 
+/** Default glm-vision settings applied when no config file exists or fields are invalid. */
 export const DEFAULT_CONFIG: VisionConfig = {
   model: "glm-4.6v",
   promptMode: "default",
@@ -72,8 +76,11 @@ export const DEFAULT_CONFIG: VisionConfig = {
   maxImages: DEFAULT_MAX_IMAGES,
 };
 
+/** Vision models users can select for image description. */
 export const MODELS = ["glm-4.6v", "glm-4.6v-flash", "glm-4.6v-flashx", "glm-5v-turbo"];
+/** Models probed by the `/glm-vision:check` Coding Plan availability command. */
 export const CHECK_MODELS = [...MODELS, "glm-4.5v"];
+/** Names of built-in prompt presets derived from {@link PRESET_PROMPTS}. */
 export const PRESET_NAMES = Object.keys(PRESET_PROMPTS) as PresetPromptMode[];
 
 /**
@@ -99,6 +106,11 @@ const COLON_COMMAND_ALIASES = [
     name: `glm-vision:${preset}`,
     command: preset,
     description: `switch to the ${preset} prompt preset`,
+  })),
+  ...MODELS.map((model) => ({
+    name: `glm-vision:${model}`,
+    command: model,
+    description: `switch to the ${model} model`,
   })),
 ] as const;
 
@@ -212,10 +224,12 @@ function loadConfigResult(configPath = getConfigPath()): LoadedConfig {
   }
 }
 
+/** Load glm-vision config from disk, falling back to {@link DEFAULT_CONFIG} for missing or invalid fields. */
 export function loadConfig(configPath = getConfigPath()): VisionConfig {
   return loadConfigResult(configPath).config;
 }
 
+/** Persist glm-vision config to the path returned by {@link getConfigPath}. */
 export function saveConfig(c: VisionConfig, configPath = getConfigPath()) {
   fs.mkdirSync(path.dirname(configPath), { recursive: true });
   fs.writeFileSync(configPath, JSON.stringify(normalizeConfig(c), null, 2));
@@ -307,17 +321,20 @@ function statusText(c: VisionConfig, configPath: string, cachePath: string, warn
 }
 
 // -- Image extraction ------------------------------------------
+/** Normalized image payload extracted from Pi message content blocks. */
 export interface ImageData {
   base64?: string;
   mediaType?: string;
   url?: string;
 }
 
+/** {@link ImageData} with a stable label for multi-image vision requests. */
 export interface LabeledImageData extends ImageData {
   index: number;
   label: string;
 }
 
+/** Coerce a config value to a positive integer image limit, defaulting to {@link DEFAULT_MAX_IMAGES}. */
 export function normalizeMaxImages(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_IMAGES;
   return Math.max(1, Math.floor(value));
@@ -348,6 +365,7 @@ function extractImageFromBlock(block: any): ImageData | null {
   return null;
 }
 
+/** Return the first extractable image from Pi message content blocks, if any. */
 export function extractImage(content: any[]): ImageData | null {
   for (const block of content) {
     const img = extractImageFromBlock(block);
@@ -356,6 +374,7 @@ export function extractImage(content: any[]): ImageData | null {
   return null;
 }
 
+/** Extract up to `limit` labeled images from Pi message content blocks. */
 export function extractImages(content: any[], limit = Number.POSITIVE_INFINITY): LabeledImageData[] {
   const images: LabeledImageData[] = [];
   for (const block of content) {
@@ -368,14 +387,17 @@ export function extractImages(content: any[], limit = Number.POSITIVE_INFINITY):
   return images;
 }
 
+/** Count how many images can be extracted from Pi message content blocks. */
 export function countExtractableImages(content: any[]): number {
   return extractImages(content).length;
 }
 
+/** Return whether Pi message content includes image or image_url blocks. */
 export function hasImageContent(content: any[]): boolean {
   return content.some((b) => b.type === "image" || b.type === "image_url");
 }
 
+/** Build the user prompt sent to the vision model, including image labels and skip notes. */
 export function visionPrompt(prompt: string, images: LabeledImageData[], skippedCount = 0): string {
   const labels = images.map((img) => img.label).join(", ");
   const skipped = skippedCount > 0 ? ` ${skippedCount} additional image(s) were omitted due to the configured limit.` : "";
@@ -387,6 +409,7 @@ function imageUrl(img: ImageData): string {
   return `data:${img.mediaType || "image/png"};base64,${img.base64 || ""}`;
 }
 
+/** Build Z.AI chat-completions content blocks for a multi-image vision request. */
 export function buildVisionRequestContent(prompt: string, images: LabeledImageData[], skippedCount = 0): any[] {
   const requestContent: any[] = [
     { type: "text", text: visionPrompt(prompt, images, skippedCount) },
@@ -398,6 +421,7 @@ export function buildVisionRequestContent(prompt: string, images: LabeledImageDa
   return requestContent;
 }
 
+/** Format a vision model response for injection back into Pi chat context. */
 export function formatVisionResult(model: string, description: string, imageCount: number, skippedCount = 0): string {
   const skipped = skippedCount > 0 ? `, skipped: ${skippedCount}` : "";
   return `[glm-vision: ${model} | images: ${imageCount}${skipped}]\n\n${description}`;
@@ -461,7 +485,7 @@ function explainHttpError(status: number, body: string, model: string): string {
     return `Z.AI rejected the zai API key (HTTP ${status}). Reauthenticate or update the zai provider API key in Pi${detail}`;
   }
   if (status === 400 || status === 404) {
-    return `Z.AI rejected model "${model}" (HTTP ${status}). Switch models with /glm-vision <model> (e.g. ${MODELS.join(", ")}), and check your Coding Plan access${detail}`;
+    return `Z.AI rejected model "${model}" (HTTP ${status}). Switch models with colon commands (e.g. ${MODELS.map((m) => `/glm-vision:${m}`).join(", ")}), and check your Coding Plan access${detail}`;
   }
   if (status === 429) {
     return `Z.AI rate limited the request (HTTP 429). Try again later${detail}`;
@@ -513,6 +537,7 @@ async function fetchWithRetry(url: string, init: RequestInit, model: string): Pr
   throw new Error(lastError || "Z.AI request failed.");
 }
 
+/** Describe a single image via the Z.AI vision API. */
 export async function describeImage(
   img: ImageData,
   model: string,
@@ -524,6 +549,7 @@ export async function describeImage(
   return describeImages(images, model, prompt, apiKey, 0, signal);
 }
 
+/** Describe one or more labeled images via the Z.AI vision API. */
 export async function describeImages(
   images: LabeledImageData[],
   model: string,
@@ -572,13 +598,14 @@ export async function describeImages(
   const description = json?.choices?.[0]?.message?.content;
   if (typeof description !== "string" || !description.trim()) {
     throw new Error(
-      "Z.AI returned an empty response. The original image was left attached; try again or switch models with /glm-vision <model>.",
+      "Z.AI returned an empty response. The original image was left attached; try again or switch models with colon commands (e.g. /glm-vision:glm-4.6v).",
     );
   }
 
   return description;
 }
 
+/** Optional override paths for glm-vision config and cache files in tests or custom installs. */
 export interface GlmVisionExtensionOptions {
   configPath?: string;
   cachePath?: string;
@@ -636,6 +663,7 @@ async function checkCodingPlanModels(models: string[], apiKey: string, signal?: 
 }
 
 // -- Extension --------------------------------------------------
+/** Create the Pi extension that intercepts image messages and runs glm-vision. */
 export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}) {
   const configPath = options.configPath || getConfigPath();
   const cachePath = options.cachePath || getCachePath();
