@@ -10,6 +10,12 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-06-03
+
+### Added
+
+- Colon flat Pi commands for glm-vision actions (`/glm-vision:status`, `/glm-vision:on`, cache controls, prompt presets, and related aliases) while keeping legacy `/glm-vision` space dispatch for one release.
+
 ## [1.2.2] - 2026-06-02
 
 ### Fixed

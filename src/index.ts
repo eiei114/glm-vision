@@ -76,6 +76,28 @@ export const MODELS = ["glm-4.6v", "glm-4.6v-flash", "glm-4.6v-flashx", "glm-5v-
 export const CHECK_MODELS = [...MODELS, "glm-4.5v"];
 export const PRESET_NAMES = Object.keys(PRESET_PROMPTS) as PresetPromptMode[];
 
+const COLON_COMMAND_ALIASES = [
+  { name: "glm-vision:status", command: "status", description: "show status, model, prompt mode, and cache stats" },
+  { name: "glm-vision:on", command: "on", description: "enable image description" },
+  { name: "glm-vision:off", command: "off", description: "disable image description" },
+  { name: "glm-vision:check", command: "check", description: "probe z.ai Coding Plan model availability" },
+  { name: "glm-vision:reset", command: "reset", description: "reset model, prompt mode, and cache settings" },
+  { name: "glm-vision:prompt", command: "prompt", description: "show active prompt text" },
+  { name: "glm-vision:prompt-set", command: "prompt", description: "save and use a custom prompt" },
+  { name: "glm-vision:cache-status", command: "cache status", description: "show cache status and cache file path" },
+  { name: "glm-vision:cache-on", command: "cache on", description: "enable response cache" },
+  { name: "glm-vision:cache-off", command: "cache off", description: "disable response cache" },
+  { name: "glm-vision:cache-clear", command: "cache clear", description: "clear cached responses" },
+  { name: "glm-vision:cache-max", command: "cache max", description: "set maximum cache entries" },
+  ...PRESET_NAMES.map((preset) => ({
+    name: `glm-vision:${preset}`,
+    command: preset,
+    description: `switch to the ${preset} prompt preset`,
+  })),
+] as const;
+
+export { COLON_COMMAND_ALIASES };
+
 function isVisionModel(value: unknown): value is string {
   return typeof value === "string" && MODELS.includes(value);
 }
@@ -433,7 +455,7 @@ function explainHttpError(status: number, body: string, model: string): string {
     return `Z.AI rejected the zai API key (HTTP ${status}). Reauthenticate or update the zai provider API key in Pi${detail}`;
   }
   if (status === 400 || status === 404) {
-    return `Z.AI rejected model "${model}" (HTTP ${status}). Use /glm-vision ${MODELS.join(" or ")}, and check your Coding Plan access${detail}`;
+    return `Z.AI rejected model "${model}" (HTTP ${status}). Switch models with /glm-vision <model> (e.g. ${MODELS.join(", ")}), and check your Coding Plan access${detail}`;
   }
   if (status === 429) {
     return `Z.AI rate limited the request (HTTP 429). Try again later${detail}`;
@@ -544,7 +566,7 @@ export async function describeImages(
   const description = json?.choices?.[0]?.message?.content;
   if (typeof description !== "string" || !description.trim()) {
     throw new Error(
-      "Z.AI returned an empty response. The original image was left attached; try again or switch models with /glm-vision.",
+      "Z.AI returned an empty response. The original image was left attached; try again or switch models with /glm-vision <model>.",
     );
   }
 
@@ -723,10 +745,171 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       }
     });
 
-    // /glm-vision command.
+    const handleGlmVisionCommand = async (args: string, ctx: any) => {
+      const trimmed = args.trim();
+      const [command, ...rest] = trimmed.split(/\s+/).filter(Boolean);
+
+      if (!trimmed || command === "status") {
+        ctx.ui.notify(statusText(config, configPath, cachePath, configWarning), configWarning ? "warning" : "info");
+        return;
+      }
+
+      if (command === "on") {
+        config.enabled = true;
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify(`glm-vision: ON (${config.model})`, "info");
+        return;
+      }
+
+      if (command === "off") {
+        config.enabled = false;
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify("glm-vision: OFF", "info");
+        return;
+      }
+
+      if (command === "check") {
+        let apiKey: string | undefined;
+        try {
+          apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
+        } catch {
+          // fall through
+        }
+
+        if (!apiKey) {
+          ctx.ui.notify("glm-vision check: no zai API key found", "error");
+          return;
+        }
+
+        const customModels = rest
+          .join(" ")
+          .split(/[\s,]+/)
+          .map((model) => model.trim())
+          .filter(Boolean);
+        const modelsToCheck = customModels.length > 0 ? customModels : CHECK_MODELS;
+
+        ctx.ui.notify("glm-vision check: probing z.ai Coding Plan models...", "info");
+        const report = await checkCodingPlanModels(modelsToCheck, apiKey, ctx.signal);
+        ctx.ui.notify(`glm-vision Coding Plan check\n${report}`, "info");
+        return;
+      }
+
+      if (command === "reset") {
+        config = { ...DEFAULT_CONFIG };
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify("glm-vision: reset to defaults", "info");
+        return;
+      }
+
+      if (command === "prompt") {
+        const nextPrompt = rest.join(" ").trim();
+        if (!nextPrompt) {
+          ctx.ui.notify(getActivePrompt(config), "info");
+          return;
+        }
+        config.prompt = nextPrompt;
+        config.promptMode = "custom";
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify("glm-vision prompt: custom prompt saved", "info");
+        return;
+      }
+
+      if (command === "mode") {
+        const mode = rest[0];
+        if (isPresetPromptMode(mode)) {
+          config.promptMode = mode;
+          config.prompt = undefined;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify(`glm-vision prompt mode -> ${mode}`, "info");
+        } else {
+          ctx.ui.notify(`Unknown prompt mode. Available: ${PRESET_NAMES.join(", ")}`, "error");
+        }
+        return;
+      }
+
+      if (command === "cache") {
+        const subcommand = rest[0];
+        if (!subcommand || subcommand === "status") {
+          const stats = cacheStats(cachePath);
+          ctx.ui.notify(
+            `glm-vision cache: ${config.cacheEnabled !== false ? "ON" : "OFF"}, ${stats.entries} entries, max ${config.cacheMaxEntries}\n${stats.path}`,
+            "info",
+          );
+          return;
+        }
+        if (subcommand === "on") {
+          config.cacheEnabled = true;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify("glm-vision cache: ON", "info");
+          return;
+        }
+        if (subcommand === "off") {
+          config.cacheEnabled = false;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify("glm-vision cache: OFF", "info");
+          return;
+        }
+        if (subcommand === "clear") {
+          clearCache(cachePath);
+          ctx.ui.notify("glm-vision cache: cleared", "info");
+          return;
+        }
+        if (subcommand === "max") {
+          const maxEntries = Number(rest[1]);
+          if (Number.isInteger(maxEntries) && maxEntries > 0) {
+            config.cacheMaxEntries = maxEntries;
+            configWarning = undefined;
+            saveConfig(config, configPath);
+            const cache = loadCache(cachePath);
+            pruneCache(cache, maxEntries);
+            saveCache(cache, cachePath);
+            ctx.ui.notify(`glm-vision cache max -> ${maxEntries}`, "info");
+          } else {
+            ctx.ui.notify("Usage: /glm-vision:cache-max <positive integer>", "error");
+          }
+          return;
+        }
+        ctx.ui.notify(
+          'Unknown cache command. Try /glm-vision:cache-status, /glm-vision:cache-clear, /glm-vision:cache-on, or /glm-vision:cache-off.',
+          "error",
+        );
+        return;
+      }
+
+      if (isPresetPromptMode(command)) {
+        config.promptMode = command;
+        config.prompt = undefined;
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify(`glm-vision prompt mode -> ${command}`, "info");
+        return;
+      }
+
+      if (MODELS.includes(trimmed)) {
+        config.model = trimmed;
+        config.enabled = true;
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
+      } else {
+        ctx.ui.notify(
+          `Unknown command: ${trimmed}. Available models: ${MODELS.join(", ")}; prompt presets: ${PRESET_NAMES.map((name) => `/glm-vision:${name}`).join(", ")}`,
+          "error",
+        );
+      }
+    };
+
+    // Legacy /glm-vision space-dispatch (kept for backward compatibility).
     pi.registerCommand("glm-vision", {
       description:
-        'Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Try "status", "ocr", "cache clear", "check".',
+        'Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Prefer colon commands such as /glm-vision:status.',
       getArgumentCompletions(prefix: string) {
         const options = [
           "status",
@@ -749,163 +932,19 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           .map((m) => ({ value: m, label: m }));
       },
       handler: async (args, ctx) => {
-        const trimmed = (args || "").trim();
-        const [command, ...rest] = trimmed.split(/\s+/).filter(Boolean);
-
-        if (!trimmed || command === "status") {
-          ctx.ui.notify(statusText(config, configPath, cachePath, configWarning), configWarning ? "warning" : "info");
-          return;
-        }
-
-        if (command === "on") {
-          config.enabled = true;
-          configWarning = undefined;
-          saveConfig(config, configPath);
-          ctx.ui.notify(`glm-vision: ON (${config.model})`, "info");
-          return;
-        }
-
-        if (command === "off") {
-          config.enabled = false;
-          configWarning = undefined;
-          saveConfig(config, configPath);
-          ctx.ui.notify("glm-vision: OFF", "info");
-          return;
-        }
-
-        if (command === "check") {
-          let apiKey: string | undefined;
-          try {
-            apiKey = await (ctx as any).modelRegistry?.getApiKeyForProvider?.("zai");
-          } catch {
-            // fall through
-          }
-
-          if (!apiKey) {
-            ctx.ui.notify("glm-vision check: no zai API key found", "error");
-            return;
-          }
-
-          const customModels = rest
-            .join(" ")
-            .split(/[\s,]+/)
-            .map((model) => model.trim())
-            .filter(Boolean);
-          const modelsToCheck = customModels.length > 0 ? customModels : CHECK_MODELS;
-
-          ctx.ui.notify("glm-vision check: probing z.ai Coding Plan models...", "info");
-          const report = await checkCodingPlanModels(modelsToCheck, apiKey, ctx.signal);
-          ctx.ui.notify(`glm-vision Coding Plan check\n${report}`, "info");
-          return;
-        }
-
-        if (command === "reset") {
-          config = { ...DEFAULT_CONFIG };
-          configWarning = undefined;
-          saveConfig(config, configPath);
-          ctx.ui.notify("glm-vision: reset to defaults", "info");
-          return;
-        }
-
-        if (command === "prompt") {
-          const nextPrompt = rest.join(" ").trim();
-          if (!nextPrompt) {
-            ctx.ui.notify(getActivePrompt(config), "info");
-            return;
-          }
-          config.prompt = nextPrompt;
-          config.promptMode = "custom";
-          configWarning = undefined;
-          saveConfig(config, configPath);
-          ctx.ui.notify("glm-vision prompt: custom prompt saved", "info");
-          return;
-        }
-
-        if (command === "mode") {
-          const mode = rest[0];
-          if (isPresetPromptMode(mode)) {
-            config.promptMode = mode;
-            config.prompt = undefined;
-            configWarning = undefined;
-            saveConfig(config, configPath);
-            ctx.ui.notify(`glm-vision prompt mode -> ${mode}`, "info");
-          } else {
-            ctx.ui.notify(`Unknown prompt mode. Available: ${PRESET_NAMES.join(", ")}`, "error");
-          }
-          return;
-        }
-
-        if (command === "cache") {
-          const subcommand = rest[0];
-          if (!subcommand || subcommand === "status") {
-            const stats = cacheStats(cachePath);
-            ctx.ui.notify(
-              `glm-vision cache: ${config.cacheEnabled !== false ? "ON" : "OFF"}, ${stats.entries} entries, max ${config.cacheMaxEntries}\n${stats.path}`,
-              "info",
-            );
-            return;
-          }
-          if (subcommand === "on") {
-            config.cacheEnabled = true;
-            configWarning = undefined;
-            saveConfig(config, configPath);
-            ctx.ui.notify("glm-vision cache: ON", "info");
-            return;
-          }
-          if (subcommand === "off") {
-            config.cacheEnabled = false;
-            configWarning = undefined;
-            saveConfig(config, configPath);
-            ctx.ui.notify("glm-vision cache: OFF", "info");
-            return;
-          }
-          if (subcommand === "clear") {
-            clearCache(cachePath);
-            ctx.ui.notify("glm-vision cache: cleared", "info");
-            return;
-          }
-          if (subcommand === "max") {
-            const maxEntries = Number(rest[1]);
-            if (Number.isInteger(maxEntries) && maxEntries > 0) {
-              config.cacheMaxEntries = maxEntries;
-              configWarning = undefined;
-              saveConfig(config, configPath);
-              const cache = loadCache(cachePath);
-              pruneCache(cache, maxEntries);
-              saveCache(cache, cachePath);
-              ctx.ui.notify(`glm-vision cache max -> ${maxEntries}`, "info");
-            } else {
-              ctx.ui.notify("Usage: /glm-vision cache max <positive integer>", "error");
-            }
-            return;
-          }
-          ctx.ui.notify('Unknown cache command. Try "cache status", "cache clear", "cache on", "cache off".', "error");
-          return;
-        }
-
-        if (isPresetPromptMode(command)) {
-          config.promptMode = command;
-          config.prompt = undefined;
-          configWarning = undefined;
-          saveConfig(config, configPath);
-          ctx.ui.notify(`glm-vision prompt mode -> ${command}`, "info");
-          return;
-        }
-
-        if (MODELS.includes(trimmed)) {
-          config.model = trimmed;
-          config.enabled = true;
-          configWarning = undefined;
-          saveConfig(config, configPath);
-          ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
-        } else {
-          ctx.ui.notify(
-            `Unknown command: ${trimmed}. Available models: ${MODELS.join(", ")}; prompt modes: ${PRESET_NAMES.join(", ")}`,
-            "error",
-          );
-        }
+        await handleGlmVisionCommand(String(args ?? "").trim(), ctx);
       },
     });
+
+    for (const alias of COLON_COMMAND_ALIASES) {
+      pi.registerCommand(alias.name, {
+        description: `GLM vision: ${alias.description}. Alias for /glm-vision ${alias.command}.`,
+        handler: async (args, ctx) => {
+          const value = String(args ?? "").trim();
+          await handleGlmVisionCommand(value ? `${alias.command} ${value}` : alias.command, ctx);
+        },
+      });
+    }
   };
 }
 

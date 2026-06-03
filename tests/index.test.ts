@@ -3,6 +3,7 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  COLON_COMMAND_ALIASES,
   DEFAULT_CONFIG,
   createGlmVisionExtension,
   describeImage,
@@ -198,8 +199,36 @@ describe("extension behavior", () => {
 
     await command.handler("unknown", ctx);
     expect(notify).toHaveBeenLastCalledWith(
-      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash, glm-4.6v-flashx, glm-5v-turbo; prompt modes: default, ocr, ui, code, diagram, brief",
+      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash, glm-4.6v-flashx, glm-5v-turbo; prompt presets: /glm-vision:default, /glm-vision:ocr, /glm-vision:ui, /glm-vision:code, /glm-vision:diagram, /glm-vision:brief",
       "error",
     );
+  });
+
+  it("registers colon flat commands and delegates to the shared handler", async () => {
+    const { commands, configPath } = setupExtension();
+    const notify = vi.fn();
+    const ctx = { ui: { notify } };
+
+    for (const alias of COLON_COMMAND_ALIASES) {
+      expect(commands.has(alias.name)).toBe(true);
+      expect(commands.get(alias.name)?.description).toContain(alias.description);
+    }
+
+    await commands.get("glm-vision:off")?.handler("", ctx);
+    expect(loadConfig(configPath).enabled).toBe(false);
+    expect(notify).toHaveBeenLastCalledWith("glm-vision: OFF", "info");
+
+    await commands.get("glm-vision:ocr")?.handler("", ctx);
+    expect(loadConfig(configPath).promptMode).toBe("ocr");
+
+    await commands.get("glm-vision:prompt-set")?.handler("Describe UI layout", ctx);
+    expect(loadConfig(configPath)).toMatchObject({
+      promptMode: "custom",
+      prompt: "Describe UI layout",
+    });
+
+    await commands.get("glm-vision:cache-max")?.handler("42", ctx);
+    expect(loadConfig(configPath).cacheMaxEntries).toBe(42);
+    expect(notify).toHaveBeenLastCalledWith("glm-vision cache max -> 42", "info");
   });
 });
