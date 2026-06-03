@@ -14,11 +14,11 @@ Use this checklist to keep `glm-vision` aligned with the Pi extension template.
 
 ## Docs set
 
-- [x] `docs/release.md`
-- [x] `docs/typescript.md`
+- [x] `docs/usage.md`
 - [x] `docs/examples.md`
-- [x] `docs/github-template.md`
-- [x] `docs/repository-settings.md`
+- [x] `docs/release.md`
+- [x] `docs/decisions/` (ADRs)
+- [x] `docs/template-checklist.md` (maintainer checklist)
 
 ## Security
 
@@ -27,10 +27,11 @@ Use this checklist to keep `glm-vision` aligned with the Pi extension template.
 
 ## GitHub settings (verify in UI)
 
-- [ ] About description + website set.
-- [ ] Topics include `pi`, `pi-package`, `typescript` (and `agent-skill` if applicable).
-- [ ] Default branch protection for `main` enabled.
-- [ ] Actions and packages permissions configured for Trusted Publishing.
+- [ ] About description + website set (`https://www.npmjs.com/package/glm-vision`).
+- [ ] Topics include `pi`, `pi-package`, `typescript`, `glm`, `vision` (add `agent-skill` only if skills are included).
+- [ ] Default branch protection for `main` enabled (require CI status checks before merge).
+- [ ] Actions can create tags/releases (Auto Release) and OIDC Trusted Publishing is enabled (`id-token: write` on Publish workflow).
+- [ ] Dependency alerts enabled; issue templates in `.github/ISSUE_TEMPLATE` stay current.
 
 ## Release readiness
 
