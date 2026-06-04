@@ -93,7 +93,7 @@ More details, including presets, configuration, and troubleshooting, live in [`d
 | Path | Purpose |
 | --- | --- |
 | `src/` | Pi extension entrypoint (`src/index.ts`) |
-| `docs/` | Usage, release, and template docs |
+| `docs/` | Usage, examples, release, and maintainer docs |
 | `scripts/` | Upstream model watcher utilities |
 | `tests/` | Vitest coverage for core behavior |
 | `.github/workflows/` | CI, publish, auto-release, upstream watch |
@@ -125,16 +125,10 @@ git push origin HEAD
 
 See [`docs/release.md`](docs/release.md) and [`RELEASE.md`](RELEASE.md) for the full maintainer checklist.
 
-## Template checklist
+## Maintainer docs
 
-Follow [`docs/template-checklist.md`](docs/template-checklist.md) after updates that should stay aligned with the Pi extension template.
-
-More docs:
-
-- [`docs/typescript.md`](docs/typescript.md)
-- [`docs/examples.md`](docs/examples.md)
-- [`docs/github-template.md`](docs/github-template.md)
-- [`docs/repository-settings.md`](docs/repository-settings.md)
+- [`docs/examples.md`](docs/examples.md) — usage examples
+- [`docs/template-checklist.md`](docs/template-checklist.md) — Pi extension template alignment checklist
 
 ## Security
 
