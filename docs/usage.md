@@ -33,27 +33,39 @@ Single-image behavior is backward compatible: one image is still described as a 
 
 ## Commands
 
+Colon commands are the primary UX. Legacy `/glm-vision ...` space forms remain for compatibility and non-interactive scripts.
+
 | Command | Description |
 | --- | --- |
-| `/glm-vision` or `/glm-vision status` | Show status, model, prompt mode, cache stats, and active prompt. |
-| `/glm-vision on` | Enable image description. |
-| `/glm-vision off` | Disable image description and forward images as-is. |
-| `/glm-vision check` | Probe z.ai Coding Plan availability for known vision models. |
-| `/glm-vision check <model>` | Probe a new candidate model before adding it. |
-| `/glm-vision glm-4.6v` | Switch to GLM-4.6V (default). |
-| `/glm-vision glm-4.6v-flash` | Switch to GLM-4.6V Flash (lighter). |
-| `/glm-vision glm-4.6v-flashx` | Switch to GLM-4.6V FlashX (lightweight paid tier). |
-| `/glm-vision glm-5v-turbo` | Switch to GLM-5V-Turbo (multimodal coding model). |
-| `/glm-vision <preset>` | Switch prompt preset, e.g. `/glm-vision ocr`. |
-| `/glm-vision mode <preset>` | Switch prompt preset, e.g. `/glm-vision mode ui`. |
-| `/glm-vision prompt` | Show active prompt text. |
-| `/glm-vision prompt <text>` | Save and use a custom prompt. |
-| `/glm-vision reset` | Reset model, prompt mode, and cache settings to defaults. |
-| `/glm-vision cache status` | Show cache status and cache file path. |
-| `/glm-vision cache on` | Enable response cache. |
-| `/glm-vision cache off` | Disable response cache without deleting entries. |
-| `/glm-vision cache clear` | Clear cached responses. |
-| `/glm-vision cache max <n>` | Set maximum cache entries and prune older entries. |
+| `/glm-vision:status` | Show status, model, prompt mode, cache stats, and active prompt. |
+| `/glm-vision:on` | Enable image description. |
+| `/glm-vision:off` | Disable image description and forward images as-is. |
+| `/glm-vision:model` | Open a TUI picker to switch vision models (enables glm-vision on selection). |
+| `/glm-vision:mode` | Open a TUI picker to switch prompt presets. |
+| `/glm-vision:check` | Probe z.ai Coding Plan availability for known vision models. |
+| `/glm-vision:check <model>` | Probe a new candidate model before adding it. |
+| `/glm-vision:glm-4.6v` | Shortcut to GLM-4.6V (default). |
+| `/glm-vision:glm-4.6v-flash` | Shortcut to GLM-4.6V Flash (lighter). |
+| `/glm-vision:glm-4.6v-flashx` | Shortcut to GLM-4.6V FlashX (lightweight paid tier). |
+| `/glm-vision:glm-5v-turbo` | Shortcut to GLM-5V-Turbo (multimodal coding model). |
+| `/glm-vision:<preset>` | Shortcut to a prompt preset, e.g. `/glm-vision:ocr`. |
+| `/glm-vision:prompt` | Show active prompt text. |
+| `/glm-vision:prompt-set <text>` | Save and use a custom prompt. |
+| `/glm-vision:reset` | Reset model, prompt mode, and cache settings to defaults. |
+| `/glm-vision:cache-status` | Show cache status and cache file path. |
+| `/glm-vision:cache-on` | Enable response cache. |
+| `/glm-vision:cache-off` | Disable response cache without deleting entries. |
+| `/glm-vision:cache-clear` | Clear cached responses. |
+| `/glm-vision:cache-max <n>` | Set maximum cache entries and prune older entries. |
+
+### Legacy space commands (compatibility)
+
+| Command | Description |
+| --- | --- |
+| `/glm-vision` or `/glm-vision status` | Same as `/glm-vision:status`. |
+| `/glm-vision <model>` | Switch model by name (useful without TUI). |
+| `/glm-vision mode <preset>` | Switch preset by name (useful without TUI). |
+| `/glm-vision cache on` | Same as `/glm-vision:cache-on`. |
 
 ## Prompt presets
 
@@ -83,7 +95,7 @@ Fresh API calls show `cache miss` and are saved for later reuse when the cache i
 z.ai Coding Plan availability can change as new GLM vision models roll out. Run:
 
 ```bash
-/glm-vision check
+/glm-vision:check
 ```
 
 The command uses your existing zai provider API key and probes the known vision-model candidates. It reports which models are currently accepted by the Coding Plan API, so maintainers can quickly decide whether `MODELS` and docs need an update.
@@ -91,7 +103,7 @@ The command uses your existing zai provider API key and probes the known vision-
 To test a newly announced model before editing the extension, pass it explicitly:
 
 ```bash
-/glm-vision check glm-new-vision-model
+/glm-vision:check glm-new-vision-model
 ```
 
 Maintainers can also run the upstream watcher outside Pi:
@@ -168,7 +180,7 @@ glm-vision reuses the same API key that Pi uses for the `zai` provider. No addit
 ### glm-vision does not run
 
 - Confirm the active Pi model uses the `zai` provider.
-- Run `/glm-vision` and confirm the status is `ON`.
+- Run `/glm-vision:status` and confirm the status is `ON`.
 - Confirm the file is read through the `read` tool and contains supported image data.
 - Restart the Pi session after installing or changing packages.
 
@@ -180,11 +192,11 @@ Fixes:
 
 1. Re-authenticate or reconfigure the `zai` provider in Pi.
 2. Start a new Pi session.
-3. Run `/glm-vision` to confirm the extension loaded.
+3. Run `/glm-vision:status` to confirm the extension loaded.
 
 ### Vision response is incomplete or misses text
 
-- Switch to `/glm-vision glm-4.6v` for detailed reasoning.
+- Switch to `/glm-vision:model` or `/glm-vision:glm-4.6v` for detailed reasoning.
 - Crop the image to the relevant area.
 - Increase contrast or resolution before reading the image.
 - Customize `~/.pi/glm-vision.json` with an OCR-focused prompt or the `ocr` prompt preset.
@@ -196,7 +208,7 @@ This can happen when glm-vision is disabled, the active provider is not `zai`, t
 ### Vision API returns an error
 
 - Check z.ai plan access for `glm-4.6v` or `glm-4.6v-flash`.
-- Try the other model with `/glm-vision glm-4.6v-flash` or `/glm-vision glm-4.6v`.
+- Try another model with `/glm-vision:model` or model shortcuts such as `/glm-vision:glm-4.6v-flash`.
 - Retry with a smaller or cropped image.
 - Include the exact `[glm-vision error: ...]` text when filing a bug.
 

@@ -199,7 +199,7 @@ describe("extension behavior", () => {
 
     await command.handler("unknown", ctx);
     expect(notify).toHaveBeenLastCalledWith(
-      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash, glm-4.6v-flashx, glm-5v-turbo; prompt presets: /glm-vision:default, /glm-vision:ocr, /glm-vision:ui, /glm-vision:code, /glm-vision:diagram, /glm-vision:brief",
+      "Unknown command: unknown. Try /glm-vision:model, /glm-vision:mode, or /glm-vision:status.",
       "error",
     );
   });
@@ -230,5 +230,57 @@ describe("extension behavior", () => {
     await commands.get("glm-vision:cache-max")?.handler("42", ctx);
     expect(loadConfig(configPath).cacheMaxEntries).toBe(42);
     expect(notify).toHaveBeenLastCalledWith("glm-vision cache max -> 42", "info");
+  });
+
+  it("selects model and prompt mode via colon commands when TUI is available", async () => {
+    const { commands, configPath } = setupExtension();
+    const notify = vi.fn();
+    const select = vi.fn();
+    const ctx = { ui: { notify, select }, hasUI: true };
+
+    select.mockResolvedValueOnce("glm-4.6v-flash");
+    await commands.get("glm-vision:model")?.handler("", ctx);
+    expect(select).toHaveBeenCalledWith("Select vision model", [
+      "glm-4.6v",
+      "glm-4.6v-flash",
+      "glm-4.6v-flashx",
+      "glm-5v-turbo",
+    ], { signal: undefined });
+    expect(loadConfig(configPath)).toMatchObject({ model: "glm-4.6v-flash", enabled: true });
+    expect(notify).toHaveBeenLastCalledWith("glm-vision model -> glm-4.6v-flash", "info");
+
+    select.mockResolvedValueOnce("ocr");
+    await commands.get("glm-vision:mode")?.handler("", ctx);
+    expect(select).toHaveBeenCalledWith("Select prompt preset", [
+      "default",
+      "ocr",
+      "ui",
+      "code",
+      "diagram",
+      "brief",
+    ], { signal: undefined });
+    expect(loadConfig(configPath)).toMatchObject({ promptMode: "ocr" });
+    expect(loadConfig(configPath)).not.toHaveProperty("prompt");
+    expect(notify).toHaveBeenLastCalledWith("glm-vision prompt mode -> ocr", "info");
+  });
+
+  it("requires TUI for selection-driven model and mode colon commands", async () => {
+    const { commands } = setupExtension();
+    const notify = vi.fn();
+    const select = vi.fn();
+    const ctx = { ui: { notify, select }, hasUI: false };
+
+    await commands.get("glm-vision:model")?.handler("", ctx);
+    expect(select).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenLastCalledWith(
+      "glm-vision:model requires the Pi TUI. In non-interactive mode use /glm-vision <model>.",
+      "warning",
+    );
+
+    await commands.get("glm-vision:mode")?.handler("", ctx);
+    expect(notify).toHaveBeenLastCalledWith(
+      "glm-vision:mode requires the Pi TUI. In non-interactive mode use /glm-vision mode <preset>.",
+      "warning",
+    );
   });
 });

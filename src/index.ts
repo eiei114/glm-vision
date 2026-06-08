@@ -102,6 +102,8 @@ const COLON_COMMAND_ALIASES = [
   { name: "glm-vision:cache-off", command: "cache off", description: "disable response cache" },
   { name: "glm-vision:cache-clear", command: "cache clear", description: "clear cached responses" },
   { name: "glm-vision:cache-max", command: "cache max", description: "set maximum cache entries" },
+  { name: "glm-vision:model", command: "model", description: "select vision model from a list" },
+  { name: "glm-vision:mode", command: "mode", description: "select prompt preset from a list" },
   ...PRESET_NAMES.map((preset) => ({
     name: `glm-vision:${preset}`,
     command: preset,
@@ -860,8 +862,62 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         return;
       }
 
+      if (command === "model") {
+        const modelArg = rest.join(" ").trim();
+        if (modelArg) {
+          if (isVisionModel(modelArg)) {
+            config.model = modelArg;
+            config.enabled = true;
+            configWarning = undefined;
+            saveConfig(config, configPath);
+            ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
+          } else {
+            ctx.ui.notify(`Unknown model. Available: ${MODELS.join(", ")}`, "error");
+          }
+          return;
+        }
+
+        if (!ctx.hasUI) {
+          ctx.ui.notify(
+            "glm-vision:model requires the Pi TUI. In non-interactive mode use /glm-vision <model>.",
+            "warning",
+          );
+          return;
+        }
+
+        const selected = await ctx.ui.select("Select vision model", [...MODELS], { signal: ctx.signal });
+        if (!selected || !isVisionModel(selected)) return;
+
+        config.model = selected;
+        config.enabled = true;
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
+        return;
+      }
+
       if (command === "mode") {
-        const mode = rest[0];
+        const mode = rest.join(" ").trim();
+        if (!mode) {
+          if (!ctx.hasUI) {
+            ctx.ui.notify(
+              "glm-vision:mode requires the Pi TUI. In non-interactive mode use /glm-vision mode <preset>.",
+              "warning",
+            );
+            return;
+          }
+
+          const selected = await ctx.ui.select("Select prompt preset", [...PRESET_NAMES], { signal: ctx.signal });
+          if (!selected || !isPresetPromptMode(selected)) return;
+
+          config.promptMode = selected;
+          config.prompt = undefined;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify(`glm-vision prompt mode -> ${selected}`, "info");
+          return;
+        }
+
         if (isPresetPromptMode(mode)) {
           config.promptMode = mode;
           config.prompt = undefined;
@@ -942,7 +998,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
       } else {
         ctx.ui.notify(
-          `Unknown command: ${trimmed}. Available models: ${MODELS.join(", ")}; prompt presets: ${PRESET_NAMES.map((name) => `/glm-vision:${name}`).join(", ")}`,
+          `Unknown command: ${trimmed}. Try /glm-vision:model, /glm-vision:mode, or /glm-vision:status.`,
           "error",
         );
       }
