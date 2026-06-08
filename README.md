@@ -59,7 +59,7 @@ pi -e npm:glm-vision
 After installing, start a Pi session (or run locally with `pi -e .`) and confirm the extension loaded:
 
 ```bash
-/glm-vision
+/glm-vision:status
 ```
 
 Then ask Pi to read an image:
@@ -79,14 +79,14 @@ Command examples:
 
 | Command | Description |
 | --- | --- |
-| `/glm-vision` | Show status, model, prompt mode, and cache stats. |
-| `/glm-vision on` | Enable image description. |
-| `/glm-vision off` | Disable image description. |
-| `/glm-vision glm-4.6v` | Switch to the default vision model. |
-| `/glm-vision mode ocr` | Switch to the OCR prompt preset. |
-| `/glm-vision cache status` | Show cache status. |
+| `/glm-vision:status` | Show status, model, prompt mode, and cache stats. |
+| `/glm-vision:on` | Enable image description. |
+| `/glm-vision:off` | Disable image description. |
+| `/glm-vision:model` | Open a TUI picker to switch vision models. |
+| `/glm-vision:mode` | Open a TUI picker to switch prompt presets. |
+| `/glm-vision:cache-status` | Show cache status. |
 
-More details, including presets, configuration, and troubleshooting, live in [`docs/usage.md`](docs/usage.md).
+Legacy space forms such as `/glm-vision on` and `/glm-vision glm-4.6v` remain available for compatibility. More details, including presets, configuration, and troubleshooting, live in [`docs/usage.md`](docs/usage.md).
 
 ## Package contents
 

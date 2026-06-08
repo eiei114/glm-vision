@@ -23,7 +23,9 @@ When in doubt, choose the smallest version bump that accurately describes user i
 
    ```bash
    pi install npm:glm-vision
-   /glm-vision
+   /glm-vision:status
+   /glm-vision:model
+   /glm-vision:mode
    ```
 
 7. Test or manually verify the core scenarios:

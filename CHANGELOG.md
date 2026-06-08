@@ -10,6 +10,16 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-06-08
+
+### Added
+
+- Selection-driven `/glm-vision:model` and `/glm-vision:mode` commands using the Pi TUI picker.
+
+### Changed
+
+- README, usage guide, release checklist, and bug-report template now document colon commands as the primary UX; legacy space forms remain compatibility-only.
+
 ## [1.3.0] - 2026-06-03
 
 ### Added
