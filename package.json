@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "validate:package": "npm pack --dry-run",
-    "check:upstream": "node scripts/check-upstream-models.mjs"
+    "check:upstream": "node scripts/check-upstream-models.mjs",
+    "version:check": "node scripts/check-version-bump.mjs"
   },
   "keywords": [
     "pi-package",
