@@ -50,7 +50,9 @@ interface CacheEntry {
   createdAt: string;
   description: string;
   imageHash: string;
+  imageHashes: string[];
   mediaType: string;
+  mediaTypes: string[];
   model: string;
   promptHash: string;
   promptMode: PromptMode;
@@ -270,19 +272,31 @@ function getPromptLabel(c: VisionConfig): PromptMode {
   return "default";
 }
 
-function makeCacheKey(img: ImageData, model: string, prompt: string): string {
-  const base64 = img.base64 || "";
-  const imageHash = hash(Buffer.from(base64, "base64"));
-  return hash(JSON.stringify({ imageHash, mediaType: img.mediaType, url: img.url, model, prompt }));
+// Derive a cache key from ALL images in a request. Keying on images[0]
+// only caused multi-image collisions: two requests sharing the same
+// first image but differing in images[1..n] hit the same cache entry.
+function hashImage(img: ImageData): string {
+  return hash(Buffer.from(img.base64 || "", "base64"));
 }
 
-function makeCacheEntry(img: ImageData, model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
-  const base64 = img.base64 || "";
+function makeCacheKey(images: ImageData[], model: string, prompt: string): string {
+  const imageHashes = images.map(hashImage);
+  const mediaTypes = images.map((img) => img.mediaType || "unknown");
+  const urls = images.map((img) => img.url);
+  return hash(JSON.stringify({ imageHashes, mediaTypes, urls, model, prompt }));
+}
+
+function makeCacheEntry(images: ImageData[], model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
+  const imageHashes = images.map(hashImage);
   return {
     createdAt: new Date().toISOString(),
     description,
-    imageHash: hash(Buffer.from(base64, "base64")),
-    mediaType: img.mediaType || "unknown",
+    // Backward-compat scalars for the single-image case (introspection /
+    // old tooling). Arrays are the source of truth.
+    imageHash: imageHashes[0] ?? "",
+    mediaType: images[0]?.mediaType || "unknown",
+    imageHashes,
+    mediaTypes: images.map((img) => img.mediaType || "unknown"),
     model,
     promptHash: hash(prompt),
     promptMode: mode,
@@ -714,8 +728,8 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       const prompt = getActivePrompt(config);
       const promptMode = getPromptLabel(config);
 
-      // Cache: use first image hash as key (backward compatible for single-image)
-      const cacheKey = makeCacheKey(images[0], config.model, prompt);
+      // Cache key covers all images in the request (see makeCacheKey).
+      const cacheKey = makeCacheKey(images, config.model, prompt);
 
       if (config.cacheEnabled !== false) {
         const cache = loadCache(cachePath);
@@ -756,7 +770,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         const description = await describeImages(images, config.model, prompt, apiKey, skippedCount, ctx.signal);
         if (config.cacheEnabled !== false) {
           const cache = loadCache(cachePath);
-          cache.entries[cacheKey] = makeCacheEntry(images[0], config.model, prompt, promptMode, description);
+          cache.entries[cacheKey] = makeCacheEntry(images, config.model, prompt, promptMode, description);
           pruneCache(cache, config.cacheMaxEntries || DEFAULT_CACHE_MAX_ENTRIES);
           saveCache(cache, cachePath);
         }

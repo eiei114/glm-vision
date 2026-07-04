@@ -33,8 +33,12 @@ function setupExtension(configPath = tempConfigPath()) {
     }),
   };
 
-  createGlmVisionExtension({ configPath })(pi as any);
-  return { handlers, commands, configPath };
+  // Isolate the cache alongside the config so tests never read or write
+  // the user's real ~/.pi/glm-vision-cache.json. Both files live under the
+  // same temp dir, cleaned up by afterEach.
+  const cachePath = path.join(path.dirname(configPath), "glm-vision-cache.json");
+  createGlmVisionExtension({ configPath, cachePath })(pi as any);
+  return { handlers, commands, configPath, cachePath };
 }
 
 afterEach(() => {
@@ -262,6 +266,53 @@ describe("extension behavior", () => {
     expect(loadConfig(configPath)).toMatchObject({ promptMode: "ocr" });
     expect(loadConfig(configPath)).not.toHaveProperty("prompt");
     expect(notify).toHaveBeenLastCalledWith("glm-vision prompt mode -> ocr", "info");
+  });
+
+  it("does not collide multi-image cache entries sharing the same first image", async () => {
+    // Regression: cache key was derived from images[0] only. Two reads
+    // sharing image[0] but differing in image[1] collided, returning the
+    // first description for the second request. Key must cover all images.
+    const callDescriptions = ["first pair description", "second pair description"];
+    let callIndex = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: callDescriptions[callIndex++] } }] }),
+      })),
+    );
+    const { handlers } = setupExtension();
+    const ctx = {
+      model: { provider: "zai" },
+      modelRegistry: { getApiKeyForProvider: vi.fn(async () => "secret") },
+    };
+
+    // Pair A: shared image, then "a".
+    const resultA = await handlers.get("tool_result")?.(
+      {
+        toolName: "read",
+        content: [
+          { type: "image", data: "c2hhcmVkLWJ5dGVz", mediaType: "image/png" },
+          { type: "image", data: "cGl4ZWxzLWE=", mediaType: "image/png" },
+        ],
+      },
+      ctx,
+    );
+    expect(resultA.content[0].text).toContain("first pair description");
+
+    // Pair B: SAME first image, different second image "b".
+    const resultB = await handlers.get("tool_result")?.(
+      {
+        toolName: "read",
+        content: [
+          { type: "image", data: "c2hhcmVkLWJ5dGVz", mediaType: "image/png" },
+          { type: "image", data: "cGl4ZWxzLWI=", mediaType: "image/png" },
+        ],
+      },
+      ctx,
+    );
+    expect(resultB.content[0].text).toContain("second pair description");
+    expect(resultB.content[0].text).not.toContain("cache hit");
   });
 
   it("requires TUI for selection-driven model and mode colon commands", async () => {
