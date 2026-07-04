@@ -91,7 +91,7 @@ body:
     id: prompt
     attributes:
       label: Prompt or command used
-      description: Include the user prompt, `/glm-vision` command, or read request that triggered the issue.
+      description: Include the user prompt, `/glm-vision:*` command, or read request that triggered the issue.
       render: text
     validations:
       required: true
@@ -120,7 +120,7 @@ body:
       options:
         - label: I confirmed the active provider is `zai`.
           required: true
-        - label: I confirmed `/glm-vision` shows the extension is enabled.
+        - label: I confirmed `/glm-vision:status` shows the extension is enabled.
           required: true
         - label: I removed secrets, API keys, and private data from logs.
           required: true

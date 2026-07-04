@@ -1,5 +1,17 @@
 # Examples
 
+## Switching model and prompt mode
+
+In the Pi TUI, use selection-driven colon commands instead of memorizing internal model ids or preset names:
+
+```text
+/glm-vision:model
+/glm-vision:mode
+/glm-vision:status
+```
+
+Individual shortcuts such as `/glm-vision:ocr` or `/glm-vision:glm-4.6v-flash` still work when you already know the target.
+
 ## UI screenshot review
 
 Use when reviewing visual regressions, app states, design implementation, or accessibility issues.

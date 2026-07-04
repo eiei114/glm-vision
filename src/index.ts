@@ -50,7 +50,9 @@ interface CacheEntry {
   createdAt: string;
   description: string;
   imageHash: string;
+  imageHashes: string[];
   mediaType: string;
+  mediaTypes: string[];
   model: string;
   promptHash: string;
   promptMode: PromptMode;
@@ -102,6 +104,8 @@ const COLON_COMMAND_ALIASES = [
   { name: "glm-vision:cache-off", command: "cache off", description: "disable response cache" },
   { name: "glm-vision:cache-clear", command: "cache clear", description: "clear cached responses" },
   { name: "glm-vision:cache-max", command: "cache max", description: "set maximum cache entries" },
+  { name: "glm-vision:model", command: "model", description: "select vision model from a list" },
+  { name: "glm-vision:mode", command: "mode", description: "select prompt preset from a list" },
   ...PRESET_NAMES.map((preset) => ({
     name: `glm-vision:${preset}`,
     command: preset,
@@ -268,19 +272,31 @@ function getPromptLabel(c: VisionConfig): PromptMode {
   return "default";
 }
 
-function makeCacheKey(img: ImageData, model: string, prompt: string): string {
-  const base64 = img.base64 || "";
-  const imageHash = hash(Buffer.from(base64, "base64"));
-  return hash(JSON.stringify({ imageHash, mediaType: img.mediaType, url: img.url, model, prompt }));
+// Derive a cache key from ALL images in a request. Keying on images[0]
+// only caused multi-image collisions: two requests sharing the same
+// first image but differing in images[1..n] hit the same cache entry.
+function hashImage(img: ImageData): string {
+  return hash(Buffer.from(img.base64 || "", "base64"));
 }
 
-function makeCacheEntry(img: ImageData, model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
-  const base64 = img.base64 || "";
+function makeCacheKey(images: ImageData[], model: string, prompt: string): string {
+  const imageHashes = images.map(hashImage);
+  const mediaTypes = images.map((img) => img.mediaType || "unknown");
+  const urls = images.map((img) => img.url);
+  return hash(JSON.stringify({ imageHashes, mediaTypes, urls, model, prompt }));
+}
+
+function makeCacheEntry(images: ImageData[], model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
+  const imageHashes = images.map(hashImage);
   return {
     createdAt: new Date().toISOString(),
     description,
-    imageHash: hash(Buffer.from(base64, "base64")),
-    mediaType: img.mediaType || "unknown",
+    // Backward-compat scalars for the single-image case (introspection /
+    // old tooling). Arrays are the source of truth.
+    imageHash: imageHashes[0] ?? "",
+    mediaType: images[0]?.mediaType || "unknown",
+    imageHashes,
+    mediaTypes: images.map((img) => img.mediaType || "unknown"),
     model,
     promptHash: hash(prompt),
     promptMode: mode,
@@ -712,8 +728,8 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       const prompt = getActivePrompt(config);
       const promptMode = getPromptLabel(config);
 
-      // Cache: use first image hash as key (backward compatible for single-image)
-      const cacheKey = makeCacheKey(images[0], config.model, prompt);
+      // Cache key covers all images in the request (see makeCacheKey).
+      const cacheKey = makeCacheKey(images, config.model, prompt);
 
       if (config.cacheEnabled !== false) {
         const cache = loadCache(cachePath);
@@ -754,7 +770,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         const description = await describeImages(images, config.model, prompt, apiKey, skippedCount, ctx.signal);
         if (config.cacheEnabled !== false) {
           const cache = loadCache(cachePath);
-          cache.entries[cacheKey] = makeCacheEntry(images[0], config.model, prompt, promptMode, description);
+          cache.entries[cacheKey] = makeCacheEntry(images, config.model, prompt, promptMode, description);
           pruneCache(cache, config.cacheMaxEntries || DEFAULT_CACHE_MAX_ENTRIES);
           saveCache(cache, cachePath);
         }
@@ -860,8 +876,62 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         return;
       }
 
+      if (command === "model") {
+        const modelArg = rest.join(" ").trim();
+        if (modelArg) {
+          if (isVisionModel(modelArg)) {
+            config.model = modelArg;
+            config.enabled = true;
+            configWarning = undefined;
+            saveConfig(config, configPath);
+            ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
+          } else {
+            ctx.ui.notify(`Unknown model. Available: ${MODELS.join(", ")}`, "error");
+          }
+          return;
+        }
+
+        if (!ctx.hasUI) {
+          ctx.ui.notify(
+            "glm-vision:model requires the Pi TUI. In non-interactive mode use /glm-vision <model>.",
+            "warning",
+          );
+          return;
+        }
+
+        const selected = await ctx.ui.select("Select vision model", [...MODELS], { signal: ctx.signal });
+        if (!selected || !isVisionModel(selected)) return;
+
+        config.model = selected;
+        config.enabled = true;
+        configWarning = undefined;
+        saveConfig(config, configPath);
+        ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
+        return;
+      }
+
       if (command === "mode") {
-        const mode = rest[0];
+        const mode = rest.join(" ").trim();
+        if (!mode) {
+          if (!ctx.hasUI) {
+            ctx.ui.notify(
+              "glm-vision:mode requires the Pi TUI. In non-interactive mode use /glm-vision mode <preset>.",
+              "warning",
+            );
+            return;
+          }
+
+          const selected = await ctx.ui.select("Select prompt preset", [...PRESET_NAMES], { signal: ctx.signal });
+          if (!selected || !isPresetPromptMode(selected)) return;
+
+          config.promptMode = selected;
+          config.prompt = undefined;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          ctx.ui.notify(`glm-vision prompt mode -> ${selected}`, "info");
+          return;
+        }
+
         if (isPresetPromptMode(mode)) {
           config.promptMode = mode;
           config.prompt = undefined;
@@ -942,7 +1012,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         ctx.ui.notify(`glm-vision model -> ${config.model}`, "info");
       } else {
         ctx.ui.notify(
-          `Unknown command: ${trimmed}. Available models: ${MODELS.join(", ")}; prompt presets: ${PRESET_NAMES.map((name) => `/glm-vision:${name}`).join(", ")}`,
+          `Unknown command: ${trimmed}. Try /glm-vision:model, /glm-vision:mode, or /glm-vision:status.`,
           "error",
         );
       }

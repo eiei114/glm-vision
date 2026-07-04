@@ -33,8 +33,12 @@ function setupExtension(configPath = tempConfigPath()) {
     }),
   };
 
-  createGlmVisionExtension({ configPath })(pi as any);
-  return { handlers, commands, configPath };
+  // Isolate the cache alongside the config so tests never read or write
+  // the user's real ~/.pi/glm-vision-cache.json. Both files live under the
+  // same temp dir, cleaned up by afterEach.
+  const cachePath = path.join(path.dirname(configPath), "glm-vision-cache.json");
+  createGlmVisionExtension({ configPath, cachePath })(pi as any);
+  return { handlers, commands, configPath, cachePath };
 }
 
 afterEach(() => {
@@ -199,7 +203,7 @@ describe("extension behavior", () => {
 
     await command.handler("unknown", ctx);
     expect(notify).toHaveBeenLastCalledWith(
-      "Unknown command: unknown. Available models: glm-4.6v, glm-4.6v-flash, glm-4.6v-flashx, glm-5v-turbo; prompt presets: /glm-vision:default, /glm-vision:ocr, /glm-vision:ui, /glm-vision:code, /glm-vision:diagram, /glm-vision:brief",
+      "Unknown command: unknown. Try /glm-vision:model, /glm-vision:mode, or /glm-vision:status.",
       "error",
     );
   });
@@ -230,5 +234,104 @@ describe("extension behavior", () => {
     await commands.get("glm-vision:cache-max")?.handler("42", ctx);
     expect(loadConfig(configPath).cacheMaxEntries).toBe(42);
     expect(notify).toHaveBeenLastCalledWith("glm-vision cache max -> 42", "info");
+  });
+
+  it("selects model and prompt mode via colon commands when TUI is available", async () => {
+    const { commands, configPath } = setupExtension();
+    const notify = vi.fn();
+    const select = vi.fn();
+    const ctx = { ui: { notify, select }, hasUI: true };
+
+    select.mockResolvedValueOnce("glm-4.6v-flash");
+    await commands.get("glm-vision:model")?.handler("", ctx);
+    expect(select).toHaveBeenCalledWith("Select vision model", [
+      "glm-4.6v",
+      "glm-4.6v-flash",
+      "glm-4.6v-flashx",
+      "glm-5v-turbo",
+    ], { signal: undefined });
+    expect(loadConfig(configPath)).toMatchObject({ model: "glm-4.6v-flash", enabled: true });
+    expect(notify).toHaveBeenLastCalledWith("glm-vision model -> glm-4.6v-flash", "info");
+
+    select.mockResolvedValueOnce("ocr");
+    await commands.get("glm-vision:mode")?.handler("", ctx);
+    expect(select).toHaveBeenCalledWith("Select prompt preset", [
+      "default",
+      "ocr",
+      "ui",
+      "code",
+      "diagram",
+      "brief",
+    ], { signal: undefined });
+    expect(loadConfig(configPath)).toMatchObject({ promptMode: "ocr" });
+    expect(loadConfig(configPath)).not.toHaveProperty("prompt");
+    expect(notify).toHaveBeenLastCalledWith("glm-vision prompt mode -> ocr", "info");
+  });
+
+  it("does not collide multi-image cache entries sharing the same first image", async () => {
+    // Regression: cache key was derived from images[0] only. Two reads
+    // sharing image[0] but differing in image[1] collided, returning the
+    // first description for the second request. Key must cover all images.
+    const callDescriptions = ["first pair description", "second pair description"];
+    let callIndex = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => ({ choices: [{ message: { content: callDescriptions[callIndex++] } }] }),
+      })),
+    );
+    const { handlers } = setupExtension();
+    const ctx = {
+      model: { provider: "zai" },
+      modelRegistry: { getApiKeyForProvider: vi.fn(async () => "secret") },
+    };
+
+    // Pair A: shared image, then "a".
+    const resultA = await handlers.get("tool_result")?.(
+      {
+        toolName: "read",
+        content: [
+          { type: "image", data: "c2hhcmVkLWJ5dGVz", mediaType: "image/png" },
+          { type: "image", data: "cGl4ZWxzLWE=", mediaType: "image/png" },
+        ],
+      },
+      ctx,
+    );
+    expect(resultA.content[0].text).toContain("first pair description");
+
+    // Pair B: SAME first image, different second image "b".
+    const resultB = await handlers.get("tool_result")?.(
+      {
+        toolName: "read",
+        content: [
+          { type: "image", data: "c2hhcmVkLWJ5dGVz", mediaType: "image/png" },
+          { type: "image", data: "cGl4ZWxzLWI=", mediaType: "image/png" },
+        ],
+      },
+      ctx,
+    );
+    expect(resultB.content[0].text).toContain("second pair description");
+    expect(resultB.content[0].text).not.toContain("cache hit");
+  });
+
+  it("requires TUI for selection-driven model and mode colon commands", async () => {
+    const { commands } = setupExtension();
+    const notify = vi.fn();
+    const select = vi.fn();
+    const ctx = { ui: { notify, select }, hasUI: false };
+
+    await commands.get("glm-vision:model")?.handler("", ctx);
+    expect(select).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenLastCalledWith(
+      "glm-vision:model requires the Pi TUI. In non-interactive mode use /glm-vision <model>.",
+      "warning",
+    );
+
+    await commands.get("glm-vision:mode")?.handler("", ctx);
+    expect(notify).toHaveBeenLastCalledWith(
+      "glm-vision:mode requires the Pi TUI. In non-interactive mode use /glm-vision mode <preset>.",
+      "warning",
+    );
   });
 });
