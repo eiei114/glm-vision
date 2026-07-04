@@ -37,7 +37,7 @@ function run(cmd) {
 }
 
 function parseSemver(v) {
-  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(String(v).trim());
+  const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(v).trim());
   if (!m) return null;
   return [Number(m[1]), Number(m[2]), Number(m[3])];
 }
@@ -109,12 +109,19 @@ function isPublishablePath(file, publishable) {
 
 const baseRef = process.env.BASE_REF ?? "origin/main";
 const publishable = loadPublishablePaths();
+const isCi = process.env.CI === "true" || process.env.GITHUB_ACTIONS === "true";
 
 let changed;
 try {
   run(`git rev-parse --verify ${baseRef}`);
   changed = run(`git diff --name-only ${baseRef}...HEAD`).split("\n").filter(Boolean);
-} catch {
+} catch (error) {
+  if (isCi) {
+    console.error(
+      `version:check fail ? base ref not available in CI (${baseRef}): ${error.message}`,
+    );
+    process.exit(1);
+  }
   console.log("version:check skip ? base ref not available (local run?)");
   process.exit(0);
 }
