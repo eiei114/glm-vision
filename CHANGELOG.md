@@ -10,6 +10,8 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+- Add Buy Me a Coffee sponsor button to README and native GitHub funding link via `.github/FUNDING.yml`.
+
 ## [1.4.0] - 2026-06-08
 
 ### Added
@@ -86,3 +88,4 @@ One or two sentences describing why this release exists.
 
 - Commands or manual checks performed before publishing.
 ```
+
