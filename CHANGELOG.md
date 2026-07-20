@@ -10,6 +10,10 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+### Changed
+
+- Bump package version to `1.4.2` for the next patch release.
+
 - Add Buy Me a Coffee sponsor button to README and native GitHub funding link via `.github/FUNDING.yml`.
 
 ## [1.4.0] - 2026-06-08
