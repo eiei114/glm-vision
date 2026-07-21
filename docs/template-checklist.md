@@ -7,7 +7,7 @@ Use this checklist to keep `glm-vision` aligned with the Pi extension template.
 - [x] `package.json` name/description/repository/homepage/bugs set for glm-vision.
 - [x] `pi.extensions` points to `src/index.ts`.
 - [x] README follows the template section order and required badges.
-- [x] CI workflow runs lint/typecheck/test/validate:package.
+- [x] CI workflow runs lint/typecheck/test/validate:package and npm run version:check on pull requests.
 - [x] Publish workflow uses npm Trusted Publishing (OIDC).
 - [x] Auto Release workflow tags version bumps.
 - [x] Required docs exist in `docs/`.
