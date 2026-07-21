@@ -107,7 +107,10 @@ npm run lint
 npm run typecheck
 npm test
 npm run validate:package
+npm run version:check
 ```
+
+`version:check` runs on pull requests in CI. Run it locally before opening a PR when you change publishable paths or bump `package.json` version.
 
 Optional upstream model checks:
 

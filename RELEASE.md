@@ -18,7 +18,7 @@ When in doubt, choose the smallest version bump that accurately describes user i
 2. Review README examples and troubleshooting for accuracy.
 3. Move completed entries from `CHANGELOG.md` `[Unreleased]` into a new version section.
 4. Confirm issue templates still request enough environment details for support.
-5. Run available local checks. If no automated checks exist, manually inspect the TypeScript entry point and package metadata.
+5. Run local validation (`npm run lint`, `npm run typecheck`, `npm test`, `npm run validate:package`, `npm run version:check`).
 6. Test installation in a clean Pi environment when possible:
 
    ```bash

@@ -39,7 +39,10 @@ npm run lint
 npm run typecheck
 npm test
 npm run validate:package
+npm run version:check
 ```
+
+`version:check` enforces semver and `CHANGELOG.md` updates when `package.json` version is bumped. CI runs it on pull requests.
 
 ## More detail
 
