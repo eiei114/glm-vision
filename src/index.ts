@@ -11,7 +11,12 @@ export const getConfigPath = () => path.join(os.homedir(), ".pi", "glm-vision.js
 export const getCachePath = () => path.join(os.homedir(), ".pi", "glm-vision-cache.json");
 
 const BASE_URL = "https://api.z.ai/api/coding/paas/v4";
-const REQUEST_TIMEOUT_MS = 30_000;
+/** Default per-attempt timeout for Z.AI vision requests. */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 30_000;
+/** Lower bound for a configured request timeout. */
+export const MIN_REQUEST_TIMEOUT_MS = 1_000;
+/** Upper bound for a configured request timeout. */
+export const MAX_REQUEST_TIMEOUT_MS = 600_000;
 const MAX_ATTEMPTS = 3;
 const RETRY_BASE_DELAY_MS = 500;
 const DEFAULT_CACHE_MAX_ENTRIES = 100;
@@ -44,6 +49,8 @@ export interface VisionConfig {
   cacheEnabled?: boolean;
   cacheMaxEntries?: number;
   maxImages?: number;
+  /** Per-attempt timeout for Z.AI vision requests, in milliseconds. */
+  requestTimeoutMs?: number;
 }
 
 interface CacheEntry {
@@ -76,6 +83,7 @@ export const DEFAULT_CONFIG: VisionConfig = {
   cacheEnabled: true,
   cacheMaxEntries: DEFAULT_CACHE_MAX_ENTRIES,
   maxImages: DEFAULT_MAX_IMAGES,
+  requestTimeoutMs: DEFAULT_REQUEST_TIMEOUT_MS,
 };
 
 /** Vision models users can select for image description. */
@@ -106,6 +114,11 @@ const COLON_COMMAND_ALIASES = [
   { name: "glm-vision:cache-max", command: "cache max", description: "set maximum cache entries" },
   { name: "glm-vision:model", command: "model", description: "select vision model from a list" },
   { name: "glm-vision:mode", command: "mode", description: "select prompt preset from a list" },
+  {
+    name: "glm-vision:timeout",
+    command: "timeout",
+    description: "show or set the request timeout in seconds",
+  },
   ...PRESET_NAMES.map((preset) => ({
     name: `glm-vision:${preset}`,
     command: preset,
@@ -192,6 +205,16 @@ function normalizeConfig(raw: Partial<VisionConfig>, warnings: string[] = []): V
     config.maxImages = normalized;
     if (raw.maxImages !== normalized) {
       warnings.push(`maxImages must be a positive integer. Using ${DEFAULT_MAX_IMAGES}.`);
+    }
+  }
+
+  if ("requestTimeoutMs" in raw) {
+    const normalized = normalizeRequestTimeoutMs(raw.requestTimeoutMs);
+    config.requestTimeoutMs = normalized;
+    if (raw.requestTimeoutMs !== normalized) {
+      warnings.push(
+        `requestTimeoutMs must be a finite number between ${MIN_REQUEST_TIMEOUT_MS} and ${MAX_REQUEST_TIMEOUT_MS}. Using ${DEFAULT_REQUEST_TIMEOUT_MS}.`,
+      );
     }
   }
 
@@ -330,6 +353,7 @@ function statusText(c: VisionConfig, configPath: string, cachePath: string, warn
     `cache file: ${stats.path}`,
     warning ? `warning: ${warning}` : undefined,
     `maxImages: ${c.maxImages || DEFAULT_MAX_IMAGES}`,
+    `request timeout: ${(c.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS) / 1000}s`,
     `active prompt: ${prompt}`,
   ]
     .filter(Boolean)
@@ -354,6 +378,12 @@ export interface LabeledImageData extends ImageData {
 export function normalizeMaxImages(value: unknown): number {
   if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_MAX_IMAGES;
   return Math.max(1, Math.floor(value));
+}
+
+/** Coerce a config value to a bounded per-attempt request timeout, defaulting to {@link DEFAULT_REQUEST_TIMEOUT_MS}. */
+export function normalizeRequestTimeoutMs(value: unknown): number {
+  if (typeof value !== "number" || !Number.isFinite(value)) return DEFAULT_REQUEST_TIMEOUT_MS;
+  return Math.min(Math.max(Math.round(value), MIN_REQUEST_TIMEOUT_MS), MAX_REQUEST_TIMEOUT_MS);
 }
 
 function extractImageFromBlock(block: any): ImageData | null {
@@ -459,9 +489,12 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-function createTimeoutSignal(parentSignal?: AbortSignal): { signal: AbortSignal; cleanup: () => void } {
+function createTimeoutSignal(
+  parentSignal: AbortSignal | undefined,
+  timeoutMs: number,
+): { signal: AbortSignal; cleanup: () => void } {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(new Error("request timed out")), REQUEST_TIMEOUT_MS);
+  const timeout = setTimeout(() => controller.abort(new Error("request timed out")), timeoutMs);
 
   const onAbort = () => controller.abort(parentSignal?.reason || new Error("request cancelled"));
   if (parentSignal) {
@@ -513,10 +546,10 @@ function explainHttpError(status: number, body: string, model: string): string {
   return `Z.AI request failed (HTTP ${status})${detail}`;
 }
 
-function explainFetchError(err: any): string {
+function explainFetchError(err: any, timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS): string {
   const message = err?.message || String(err);
   if (err?.name === "AbortError" || /timed out/i.test(message)) {
-    return `Z.AI request timed out after ${REQUEST_TIMEOUT_MS / 1000}s`;
+    return `Z.AI request timed out after ${timeoutMs / 1000}s`;
   }
   if (/cancelled|aborted/i.test(message)) {
     return "Z.AI request was cancelled";
@@ -524,11 +557,16 @@ function explainFetchError(err: any): string {
   return `Z.AI network request failed: ${message}`;
 }
 
-async function fetchWithRetry(url: string, init: RequestInit, model: string): Promise<Response> {
+async function fetchWithRetry(
+  url: string,
+  init: RequestInit,
+  model: string,
+  timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
+): Promise<Response> {
   let lastError: string | undefined;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const { signal, cleanup } = createTimeoutSignal(init.signal || undefined);
+    const { signal, cleanup } = createTimeoutSignal(init.signal || undefined, timeoutMs);
 
     try {
       const res = await fetch(url, { ...init, signal });
@@ -539,7 +577,7 @@ async function fetchWithRetry(url: string, init: RequestInit, model: string): Pr
 
       lastError = explainHttpError(res.status, await readErrorBody(res), model);
     } catch (err: any) {
-      lastError = explainFetchError(err);
+      lastError = explainFetchError(err, timeoutMs);
       if (attempt === MAX_ATTEMPTS || /cancelled|aborted/i.test(lastError)) {
         throw new Error(`${lastError} after ${attempt} attempt${attempt === 1 ? "" : "s"}.`);
       }
@@ -560,9 +598,10 @@ export async function describeImage(
   prompt: string,
   apiKey: string,
   signal?: AbortSignal,
+  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 ): Promise<string> {
   const images: LabeledImageData[] = [{ ...img, index: 1, label: "Image 1" }];
-  return describeImages(images, model, prompt, apiKey, 0, signal);
+  return describeImages(images, model, prompt, apiKey, 0, signal, requestTimeoutMs);
 }
 
 /** Describe one or more labeled images via the Z.AI vision API. */
@@ -573,6 +612,7 @@ export async function describeImages(
   apiKey: string,
   skippedCount = 0,
   signal?: AbortSignal,
+  requestTimeoutMs = DEFAULT_REQUEST_TIMEOUT_MS,
 ): Promise<string> {
   const url = `${BASE_URL}/chat/completions`;
   const requestContent = buildVisionRequestContent(prompt, images, skippedCount);
@@ -598,6 +638,7 @@ export async function describeImages(
       signal,
     },
     model,
+    requestTimeoutMs,
   );
 
   if (!res.ok) {
@@ -767,7 +808,15 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       }
 
       try {
-        const description = await describeImages(images, config.model, prompt, apiKey, skippedCount, ctx.signal);
+        const description = await describeImages(
+          images,
+          config.model,
+          prompt,
+          apiKey,
+          skippedCount,
+          ctx.signal,
+          config.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS,
+        );
         if (config.cacheEnabled !== false) {
           const cache = loadCache(cachePath);
           cache.entries[cacheKey] = makeCacheEntry(images, config.model, prompt, promptMode, description);
@@ -944,6 +993,42 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
         return;
       }
 
+      if (command === "timeout") {
+        const secondsArg = rest[0];
+        if (!secondsArg) {
+          const seconds = (config.requestTimeoutMs || DEFAULT_REQUEST_TIMEOUT_MS) / 1000;
+          ctx.ui.notify(
+            `glm-vision request timeout: ${seconds}s. Set with /glm-vision:timeout <seconds> (range ${
+              MIN_REQUEST_TIMEOUT_MS / 1000
+            }-${MAX_REQUEST_TIMEOUT_MS / 1000}s).`,
+            "info",
+          );
+          return;
+        }
+
+        const seconds = Number(secondsArg);
+        if (Number.isFinite(seconds) && seconds > 0) {
+          const requestedMs = Math.round(seconds * 1000);
+          const normalized = normalizeRequestTimeoutMs(requestedMs);
+          config.requestTimeoutMs = normalized;
+          configWarning = undefined;
+          saveConfig(config, configPath);
+          if (normalized === requestedMs) {
+            ctx.ui.notify(`glm-vision request timeout -> ${normalized / 1000}s`, "info");
+          } else {
+            ctx.ui.notify(
+              `glm-vision request timeout -> ${normalized / 1000}s (clamped to ${MIN_REQUEST_TIMEOUT_MS / 1000}-${
+                MAX_REQUEST_TIMEOUT_MS / 1000
+              }s)`,
+              "warning",
+            );
+          }
+        } else {
+          ctx.ui.notify("Usage: /glm-vision:timeout <seconds>", "error");
+        }
+        return;
+      }
+
       if (command === "cache") {
         const subcommand = rest[0];
         if (!subcommand || subcommand === "status") {
@@ -1035,6 +1120,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           "cache clear",
           "cache status",
           "cache max ",
+          "timeout ",
           ...MODELS,
           ...PRESET_NAMES,
           ...PRESET_NAMES.map((m) => `mode ${m}`),
