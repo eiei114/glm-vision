@@ -86,6 +86,7 @@ Command examples:
 | `/glm-vision:model` | Open a TUI picker to switch vision models. |
 | `/glm-vision:mode` | Open a TUI picker to switch prompt presets. |
 | `/glm-vision:cache-status` | Show cache status. |
+| `/glm-vision:timeout` | Show or set the Z.AI request timeout in seconds. |
 
 Legacy space forms such as `/glm-vision on` and `/glm-vision glm-4.6v` remain available for compatibility. More details, including presets, configuration, and troubleshooting, live in [`docs/usage.md`](docs/usage.md).
 

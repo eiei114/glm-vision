@@ -28,6 +28,7 @@ Single-image behavior is backward compatible: one image is still described as a 
 
 - `maxImages` controls how many images are sent in one vision request. Default: `4`.
 - If a tool result contains more than `maxImages` extractable images, glm-vision sends the first `maxImages` in order and notes the skipped count in the prompt/result header.
+- `requestTimeoutMs` controls the per-attempt timeout for Z.AI vision requests. Default: `30000` (30 seconds), clamped to `1000`-`600000` (1-600 seconds). Dense screenshots can take the GLM vision model well over 30 seconds to describe; raise this instead of re-reading the same image.
 - If no extractable image data is present, glm-vision leaves the tool result unchanged.
 - If authentication is missing or the vision request fails, glm-vision returns an error text and preserves the original image blocks so Pi can continue with the normal fallback path.
 
@@ -44,6 +45,8 @@ Colon commands are the primary UX. Legacy `/glm-vision ...` space forms remain f
 | `/glm-vision:mode` | Open a TUI picker to switch prompt presets. |
 | `/glm-vision:check` | Probe z.ai Coding Plan availability for known vision models. |
 | `/glm-vision:check <model>` | Probe a new candidate model before adding it. |
+| `/glm-vision:timeout` | Show the current Z.AI request timeout. |
+| `/glm-vision:timeout <seconds>` | Set the Z.AI request timeout (clamped to 1-600 seconds). |
 | `/glm-vision:glm-4.6v` | Shortcut to GLM-4.6V (default). |
 | `/glm-vision:glm-4.6v-flash` | Shortcut to GLM-4.6V Flash (lighter). |
 | `/glm-vision:glm-4.6v-flashx` | Shortcut to GLM-4.6V FlashX (lightweight paid tier). |
@@ -144,7 +147,8 @@ Config is stored at `~/.pi/glm-vision.json`:
   "promptMode": "default",
   "cacheEnabled": true,
   "cacheMaxEntries": 100,
-  "maxImages": 4
+  "maxImages": 4,
+  "requestTimeoutMs": 30000
 }
 ```
 
@@ -169,7 +173,7 @@ If `~/.pi` or this config file is missing, glm-vision uses defaults. If the conf
 
 ## API failures and retry behavior
 
-Z.AI requests time out after 30 seconds. Transient failures (`408`, `409`, `425`, `429`, and `5xx`) are retried up to 3 total attempts with exponential backoff (`500ms`, then `1000ms`). Authentication, model-access, invalid JSON, and empty-response failures return clear `glm-vision error` messages while preserving the original image content.
+Z.AI requests time out after `requestTimeoutMs` (default: 30 seconds; configurable via `~/.pi/glm-vision.json` or `/glm-vision:timeout <seconds>`, clamped to 1-600 seconds). Transient failures (`408`, `409`, `425`, `429`, and `5xx`) are retried up to 3 total attempts with exponential backoff (`500ms`, then `1000ms`). Authentication, model-access, invalid JSON, and empty-response failures return clear `glm-vision error` messages while preserving the original image content.
 
 ## How authentication works
 

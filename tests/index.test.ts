@@ -5,11 +5,14 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   COLON_COMMAND_ALIASES,
   DEFAULT_CONFIG,
+  MAX_REQUEST_TIMEOUT_MS,
+  MIN_REQUEST_TIMEOUT_MS,
   createGlmVisionExtension,
   describeImage,
   extractImage,
   hasImageContent,
   loadConfig,
+  normalizeRequestTimeoutMs,
   saveConfig,
 } from "../src/index";
 
@@ -97,6 +100,32 @@ describe("config", () => {
       enabled: false,
     });
   });
+
+  it("persists a custom request timeout", () => {
+    const configPath = tempConfigPath();
+    saveConfig({ model: "glm-4.6v", requestTimeoutMs: 180_000 }, configPath);
+
+    expect(loadConfig(configPath)).toMatchObject({ ...DEFAULT_CONFIG, requestTimeoutMs: 180_000 });
+  });
+
+  it("normalizes invalid request timeouts to the default and clamps out-of-range values", () => {
+    expect(normalizeRequestTimeoutMs(undefined)).toBe(DEFAULT_CONFIG.requestTimeoutMs);
+    expect(normalizeRequestTimeoutMs("30" as unknown)).toBe(DEFAULT_CONFIG.requestTimeoutMs);
+    expect(normalizeRequestTimeoutMs(Number.NaN)).toBe(DEFAULT_CONFIG.requestTimeoutMs);
+    expect(normalizeRequestTimeoutMs(0)).toBe(MIN_REQUEST_TIMEOUT_MS);
+    expect(normalizeRequestTimeoutMs(10_000_000)).toBe(MAX_REQUEST_TIMEOUT_MS);
+    expect(normalizeRequestTimeoutMs(90_500.4)).toBe(90_500);
+  });
+
+  it("warns when requestTimeoutMs is invalid in the config file", () => {
+    const configPath = tempConfigPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ requestTimeoutMs: "soon" }));
+
+    expect(loadConfig(configPath)).toMatchObject({
+      requestTimeoutMs: DEFAULT_CONFIG.requestTimeoutMs,
+    });
+  });
 });
 
 describe("vision API", () => {
@@ -182,6 +211,7 @@ describe("extension behavior", () => {
     expect(notify.mock.lastCall?.[0]).toContain("glm-vision: ON");
     expect(notify.mock.lastCall?.[0]).toContain("prompt: default");
     expect(notify.mock.lastCall?.[0]).toContain("cache: ON");
+    expect(notify.mock.lastCall?.[0]).toContain("request timeout: 30s");
     expect(notify.mock.lastCall?.[1]).toBe("info");
 
     await command.handler("off", ctx);
@@ -200,6 +230,26 @@ describe("extension behavior", () => {
     await command.handler("cache off", ctx);
     expect(loadConfig(configPath).cacheEnabled).toBe(false);
     expect(notify).toHaveBeenLastCalledWith("glm-vision cache: OFF", "info");
+
+    await command.handler("timeout", ctx);
+    expect(notify).toHaveBeenLastCalledWith(
+      expect.stringContaining("glm-vision request timeout: 30s"),
+      "info",
+    );
+
+    await command.handler("timeout 180", ctx);
+    expect(loadConfig(configPath).requestTimeoutMs).toBe(180_000);
+    expect(notify).toHaveBeenLastCalledWith("glm-vision request timeout -> 180s", "info");
+
+    await command.handler("timeout 0.5", ctx);
+    expect(loadConfig(configPath).requestTimeoutMs).toBe(MIN_REQUEST_TIMEOUT_MS);
+    expect(notify).toHaveBeenLastCalledWith(
+      expect.stringContaining("clamped to 1-600s"),
+      "warning",
+    );
+
+    await command.handler("timeout forever", ctx);
+    expect(notify).toHaveBeenLastCalledWith("Usage: /glm-vision:timeout <seconds>", "error");
 
     await command.handler("unknown", ctx);
     expect(notify).toHaveBeenLastCalledWith(
@@ -234,6 +284,10 @@ describe("extension behavior", () => {
     await commands.get("glm-vision:cache-max")?.handler("42", ctx);
     expect(loadConfig(configPath).cacheMaxEntries).toBe(42);
     expect(notify).toHaveBeenLastCalledWith("glm-vision cache max -> 42", "info");
+
+    await commands.get("glm-vision:timeout")?.handler("90", ctx);
+    expect(loadConfig(configPath).requestTimeoutMs).toBe(90_000);
+    expect(notify).toHaveBeenLastCalledWith("glm-vision request timeout -> 90s", "info");
   });
 
   it("selects model and prompt mode via colon commands when TUI is available", async () => {
