@@ -10,6 +10,12 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+## [1.4.3] - 2026-08-22
+
+### Changed
+
+- Merge the 2026-08-22 managed OSS dependency and maintenance PR batch.
+
 ### Added
 
 - Configurable Z.AI request timeout: `requestTimeoutMs` in `~/.pi/glm-vision.json` (default `30000`, clamped to `1000`-`600000`) and the `/glm-vision:timeout` / `/glm-vision:timeout <seconds>` commands. Dense screenshots can take GLM vision models longer than the previous hard-coded 30-second limit to describe.
