@@ -24,6 +24,12 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 - **MINOR** version: backwards-compatible features, new supported models, or new commands.
 - **PATCH** version: backwards-compatible bug fixes, documentation fixes, and internal maintenance.
 
+## [1.4.8] - 2026-09-30
+
+### Changed
+
+- Update `@earendil-works/pi-*` dependencies to `0.99.1`.
+
 ## [Unreleased]
 
 ## [1.4.3] - 2026-08-22
