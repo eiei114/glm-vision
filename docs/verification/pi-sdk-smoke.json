@@ -65,7 +65,7 @@
         {
           "id": "reloaded_extension_registered",
           "expected": "a distinct second Pi process registers glm-vision and completes a status command",
-          "observed": "first_pid=34300; second_pid=40276; first_registered=true; second_read_cycle=true; first_status=handled",
+          "observed": "distinct_processes=true; first_registered=true; second_read_cycle=true; first_status=handled",
           "passed": true
         },
         {

@@ -394,7 +394,6 @@ function inspectProcess(rpc, close, tempRoot) {
   const loadStderr = rpc.stderr.match(/failed to load extension|extension load failed/gi) ?? [];
   const exitFailure = close.code !== 0 || close.timedOut;
   return {
-    pid: rpc.child.pid ?? null,
     exit_code: close.code,
     signal: close.signal,
     timed_out: close.timedOut,
@@ -504,7 +503,16 @@ async function runFeatureProcess({ mode, cliPath, env, repoRoot, modelServer, im
     prompt_disposition: promptResponse?.data?.disposition ?? null,
     process_exit_code: process.exit_code,
   };
-  return { scenario, assertions: [], exitCode: process.exit_code, process, failure, visionRequests, observed };
+  return {
+    scenario,
+    assertions: [],
+    exitCode: process.exit_code,
+    process,
+    processId: rpc.child.pid ?? null,
+    failure,
+    visionRequests,
+    observed,
+  };
 }
 
 async function runFeatureCase({ name, mode, cliPath, env, repoRoot, modelServer, imagePath, tempRoot }) {
@@ -564,6 +572,7 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
   const firstEnv = await envForMode("success", "reload-first");
   modelServer.setScenario({ mode: "reload-first", imagePath: "unused" });
   const first = startPiProcess({ cliPath, env: firstEnv, repoRoot });
+  const firstPid = first.child.pid ?? null;
   let firstCommands = [];
   let firstPrompt;
   let firstFailure;
@@ -588,6 +597,7 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
   });
   const firstRegistered = firstCommands.some((command) => command.name === "glm-vision" && command.source === "extension");
   const secondRegistered = secondResult.observed.extension_registered === true;
+  const distinctProcesses = firstPid !== null && secondResult.processId !== null && firstPid !== secondResult.processId;
   const responsePassed =
     secondResult.scenario.toolResultContainsDescription === true &&
     containsExpected(String(secondResult.observed.final_assistant_text), "SMOKE_FEATURE_PATH_FINAL") &&
@@ -603,9 +613,9 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
     assertion(
       "reloaded_extension_registered",
       "a distinct second Pi process registers glm-vision and completes a status command",
-      `first_pid=${firstProcess.pid}; second_pid=${secondResult.process.pid}; first_registered=${firstRegistered}; second_read_cycle=${secondRegistered}; ` +
+      `distinct_processes=${distinctProcesses}; first_registered=${firstRegistered}; second_read_cycle=${secondRegistered}; ` +
         `first_status=${firstPrompt?.data?.disposition ?? "missing"}`,
-      firstRegistered && firstPrompt?.data?.disposition === "handled" && secondRegistered,
+      firstRegistered && firstPrompt?.data?.disposition === "handled" && secondRegistered && distinctProcesses,
     ),
     assertion(
       "reloaded_feature_response",
@@ -630,6 +640,7 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
     evidence: {
       command: "npm run smoke:pi",
       processes: [firstProcess, secondResult.process],
+      distinct_processes: distinctProcesses,
       first_status_disposition: firstPrompt?.data?.disposition ?? null,
       second_process: secondResult.observed,
     },
