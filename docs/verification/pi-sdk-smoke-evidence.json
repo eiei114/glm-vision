@@ -1,0 +1,295 @@
+{
+  "schema_version": 1,
+  "verification_contract": "pi-sdk-behavior-v2",
+  "command": "npm run smoke:pi",
+  "cli_version": "1.2.0",
+  "sdk_versions": {
+    "@earendil-works/pi-agent-core": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
+  },
+  "host_platform": "win32",
+  "isolation": {
+    "agent_directory": "temporary isolated PI_CODING_AGENT_DIR",
+    "user_home": "temporary isolated HOME/USERPROFILE",
+    "sessions": "--no-session",
+    "extensions": "--no-extensions with only the explicit repository extension",
+    "network": "loopback-only Pi/provider traffic; the exact Z.AI image-description endpoint is intercepted and all other non-loopback fetch() calls are rejected",
+    "model_inference": "deterministic offline fixture; no paid or external provider inference",
+    "production_global_pi_settings_touched": false
+  },
+  "cases": {
+    "extension_load": {
+      "command": "npm run smoke:pi",
+      "process": {
+        "pid": 80812,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "extension_load_errors": 0,
+        "unhandled_errors": 0,
+        "extension_error_records": 0,
+        "protocol_errors": 0,
+        "stderr": "",
+        "rpc_record_types": [
+          "response",
+          "extension_ui_request",
+          "response"
+        ]
+      },
+      "extension_command": {
+        "name": "glm-vision",
+        "description": "Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Prefer colon commands such as /glm-vision:status.",
+        "source": "extension",
+        "sourceInfo": {
+          "path": "C:\\Users\\Keisu\\multica_workspaces_desktop-api.multica.ai\\dotfield-9ac157d3a1bf\\dot-2853-a375851b8c23\\workdir\\glm-vision\\src\\index.ts",
+          "source": "cli",
+          "scope": "temporary",
+          "origin": "top-level"
+        }
+      },
+      "status_prompt_disposition": "handled",
+      "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: C:\\Users\\Keisu\\AppData\\Local\\Temp\\glm-vision-pi-sdk-smoke-pIwqUU\\extension-load-home\\.pi\\glm-vision.json\ncache file: C:\\Users\\Keisu\\AppData\\Local\\Temp\\glm-vision-pi-sdk-smoke-pIwqUU\\extension-load-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+      "vision_provider_requests": 0
+    },
+    "happy_path": {
+      "command": "npm run smoke:pi",
+      "process": {
+        "pid": 21772,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "extension_load_errors": 0,
+        "unhandled_errors": 0,
+        "extension_error_records": 0,
+        "protocol_errors": 0,
+        "stderr": "",
+        "rpc_record_types": [
+          "response",
+          "response",
+          "agent_start",
+          "turn_start",
+          "message_start",
+          "message_end",
+          "message_start",
+          "message_end",
+          "message_start",
+          "message_update",
+          "message_update",
+          "message_update",
+          "message_end",
+          "tool_execution_start",
+          "tool_execution_end",
+          "message_start",
+          "message_end",
+          "turn_end",
+          "turn_start",
+          "message_start",
+          "message_update",
+          "message_update",
+          "message_update",
+          "message_end",
+          "turn_end",
+          "agent_end",
+          "agent_settled",
+          "response"
+        ]
+      },
+      "observed": {
+        "model_requests": 2,
+        "provider_model": "glm-4.6",
+        "read_tool_offered": true,
+        "local_provider_authorized": true,
+        "tool_result_contains_description": true,
+        "tool_result_contains_handled_error": false,
+        "tool_result_contains_image": false,
+        "final_assistant_text": "SMOKE_FEATURE_PATH_FINAL",
+        "extension_registered": true,
+        "vision_provider_requests": [
+          {
+            "model": "glm-4.6v",
+            "image_count": 1,
+            "fixture_mode": "success",
+            "authorization_configured": true
+          }
+        ],
+        "prompt_disposition": "started",
+        "process_exit_code": 0
+      },
+      "provider_response_boundary": "Pi uses an actual local OpenAI-compatible model endpoint; only the exact Z.AI vision HTTP endpoint is intercepted with a deterministic response."
+    },
+    "error_path": {
+      "command": "npm run smoke:pi",
+      "process": {
+        "pid": 48252,
+        "exit_code": 0,
+        "signal": null,
+        "timed_out": false,
+        "extension_load_errors": 0,
+        "unhandled_errors": 0,
+        "extension_error_records": 0,
+        "protocol_errors": 0,
+        "stderr": "",
+        "rpc_record_types": [
+          "response",
+          "response",
+          "agent_start",
+          "turn_start",
+          "message_start",
+          "message_end",
+          "message_start",
+          "message_end",
+          "message_start",
+          "message_update",
+          "message_update",
+          "message_update",
+          "message_end",
+          "tool_execution_start",
+          "tool_execution_end",
+          "message_start",
+          "message_end",
+          "turn_end",
+          "turn_start",
+          "message_start",
+          "message_update",
+          "message_update",
+          "message_update",
+          "message_end",
+          "turn_end",
+          "agent_end",
+          "agent_settled",
+          "response"
+        ]
+      },
+      "observed": {
+        "model_requests": 2,
+        "provider_model": "glm-4.6",
+        "read_tool_offered": true,
+        "local_provider_authorized": true,
+        "tool_result_contains_description": false,
+        "tool_result_contains_handled_error": true,
+        "tool_result_contains_image": true,
+        "final_assistant_text": "SMOKE_ERROR_PATH_FINAL",
+        "extension_registered": true,
+        "vision_provider_requests": [
+          {
+            "model": "glm-4.6v",
+            "image_count": 1,
+            "fixture_mode": "error",
+            "authorization_configured": true
+          },
+          {
+            "model": "glm-4.6v",
+            "image_count": 1,
+            "fixture_mode": "error",
+            "authorization_configured": true
+          },
+          {
+            "model": "glm-4.6v",
+            "image_count": 1,
+            "fixture_mode": "error",
+            "authorization_configured": true
+          }
+        ],
+        "prompt_disposition": "started",
+        "process_exit_code": 0
+      },
+      "provider_response_boundary": "Pi uses an actual local OpenAI-compatible model endpoint; only the exact Z.AI vision HTTP endpoint is intercepted with a deterministic response."
+    },
+    "reload_cleanup": {
+      "command": "npm run smoke:pi",
+      "processes": [
+        {
+          "pid": 34300,
+          "exit_code": 0,
+          "signal": null,
+          "timed_out": false,
+          "extension_load_errors": 0,
+          "unhandled_errors": 0,
+          "extension_error_records": 0,
+          "protocol_errors": 0,
+          "stderr": "",
+          "rpc_record_types": [
+            "response",
+            "extension_ui_request",
+            "response"
+          ]
+        },
+        {
+          "pid": 40276,
+          "exit_code": 0,
+          "signal": null,
+          "timed_out": false,
+          "extension_load_errors": 0,
+          "unhandled_errors": 0,
+          "extension_error_records": 0,
+          "protocol_errors": 0,
+          "stderr": "",
+          "rpc_record_types": [
+            "response",
+            "response",
+            "agent_start",
+            "turn_start",
+            "message_start",
+            "message_end",
+            "message_start",
+            "message_end",
+            "message_start",
+            "message_update",
+            "message_update",
+            "message_update",
+            "message_end",
+            "tool_execution_start",
+            "tool_execution_end",
+            "message_start",
+            "message_end",
+            "turn_end",
+            "turn_start",
+            "message_start",
+            "message_update",
+            "message_update",
+            "message_update",
+            "message_end",
+            "turn_end",
+            "agent_end",
+            "agent_settled",
+            "response"
+          ]
+        }
+      ],
+      "first_status_disposition": "handled",
+      "second_process": {
+        "model_requests": 2,
+        "provider_model": "glm-4.6",
+        "read_tool_offered": true,
+        "local_provider_authorized": true,
+        "tool_result_contains_description": true,
+        "tool_result_contains_handled_error": false,
+        "tool_result_contains_image": false,
+        "final_assistant_text": "SMOKE_FEATURE_PATH_FINAL",
+        "extension_registered": true,
+        "vision_provider_requests": [
+          {
+            "model": "glm-4.6v",
+            "image_count": 1,
+            "fixture_mode": "success",
+            "authorization_configured": true
+          }
+        ],
+        "prompt_disposition": "started",
+        "process_exit_code": 0
+      }
+    },
+    "host_shell": {
+      "command": "npm run smoke:pi",
+      "shell": "PowerShell -NoProfile -NonInteractive",
+      "shell_command": "-NoLogo -NoProfile -NonInteractive -File <isolated-temp>\\host-shell-smoke.ps1",
+      "stdout": "1.2.0",
+      "stdout_capture": "PowerShell wrote native command output to an isolated temporary file",
+      "stderr": "",
+      "exit_code": 0,
+      "timed_out": false
+    }
+  }
+}

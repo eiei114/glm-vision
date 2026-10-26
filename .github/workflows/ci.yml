@@ -36,6 +36,9 @@ jobs:
       - name: Test
         run: npm test
 
+      - name: Pi SDK behavior smoke
+        run: npm run smoke:pi
+
       - name: Validate package
         run: npm run validate:package
 
