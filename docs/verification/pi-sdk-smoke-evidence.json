@@ -9,7 +9,7 @@
     "@earendil-works/pi-coding-agent": "1.2.0",
     "@earendil-works/pi-tui": "1.2.0"
   },
-  "host_platform": "win32",
+  "host_platform": "darwin",
   "isolation": {
     "agent_directory": "temporary isolated PI_CODING_AGENT_DIR",
     "user_home": "temporary isolated HOME/USERPROFILE",
@@ -43,14 +43,14 @@
         "description": "Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Prefer colon commands such as /glm-vision:status.",
         "source": "extension",
         "sourceInfo": {
-          "path": "<repo>\\src\\index.ts",
+          "path": "<repo>/src/index.ts",
           "source": "cli",
           "scope": "temporary",
           "origin": "top-level"
         }
       },
       "status_prompt_disposition": "handled",
-      "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\extension-load-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\extension-load-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+      "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>/extension-load-home/.pi/glm-vision.json\ncache file: <isolated-temp>/extension-load-home/.pi/glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
       "vision_provider_requests": 0
     },
     "happy_path": {
@@ -267,7 +267,7 @@
       "distinct_processes": true,
       "first_status_disposition": "handled",
       "second_status_disposition": "handled",
-      "second_status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\reload-second-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\reload-second-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+      "second_status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>/reload-second-home/.pi/glm-vision.json\ncache file: <isolated-temp>/reload-second-home/.pi/glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
       "second_process": {
         "model_requests": 2,
         "provider_model": "glm-4.6",
@@ -279,7 +279,7 @@
         "final_assistant_text": "SMOKE_FEATURE_PATH_FINAL",
         "extension_registered": true,
         "status_prompt_disposition": "handled",
-        "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\reload-second-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\reload-second-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+        "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>/reload-second-home/.pi/glm-vision.json\ncache file: <isolated-temp>/reload-second-home/.pi/glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
         "vision_provider_requests": [
           {
             "model": "glm-4.6v",
@@ -294,10 +294,10 @@
     },
     "host_shell": {
       "command": "npm run smoke:pi",
-      "shell": "PowerShell -NoProfile -NonInteractive",
-      "shell_command": "-NoLogo -NoProfile -NonInteractive -File <isolated-temp>\\host-shell-smoke.ps1",
+      "shell": "/bin/sh",
+      "shell_command": "exec '/opt/homebrew/Cellar/node/26.12.1/bin/node' '<repo>/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js' --version",
       "stdout": "1.2.0",
-      "stdout_capture": "PowerShell wrote native command output to an isolated temporary file",
+      "stdout_capture": "native shell stdout",
       "stderr": "",
       "exit_code": 0,
       "timed_out": false

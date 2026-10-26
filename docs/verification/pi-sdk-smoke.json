@@ -20,7 +20,7 @@
         {
           "id": "extension_registered",
           "expected": "get_commands lists glm-vision as an extension and /glm-vision status is handled with the ON notification",
-          "observed": "command=glm-vision:extension; disposition=handled; notify=glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\extension-load-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\extension-load-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+          "observed": "command=glm-vision:extension; disposition=handled; notify=glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>/extension-load-home/.pi/glm-vision.json\ncache file: <isolated-temp>/extension-load-home/.pi/glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
           "passed": true
         }
       ]
@@ -92,7 +92,7 @@
         {
           "id": "native_shell_boundary",
           "expected": "native shell launches pinned Pi CLI 1.2.0 and returns its version",
-          "observed": "shell=PowerShell; version=1.2.0; stderr=; exit=0",
+          "observed": "shell=/bin/sh; version=1.2.0; stderr=; exit=0",
           "passed": true
         }
       ]

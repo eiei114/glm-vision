@@ -29,6 +29,67 @@ afterEach(() => {
 });
 
 describe("Pi smoke RPC child lifecycle", () => {
+  it("flushes a final prompt response without a newline before rejecting later settlement waits", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const child = makeChild((_chunk, _encoding, callback) => callback());
+    const rpc = makeRpcClient(child as never, Date.now() + 15_000, 1);
+    const request = rpc.request("prompt");
+    const response = { type: "response", id: "pi-smoke-0-prompt", success: true, data: { disposition: "started" } };
+
+    child.stdout.write(JSON.stringify(response));
+    expect(rpc.records).toHaveLength(0);
+    expect(rpc.pendingWaiterCount).toBe(1);
+    child.emit("close", 0, null);
+
+    await expect(request).resolves.toEqual(response);
+    const settled = rpc.waitForAgentSettled();
+    expect(rpc.pendingWaiterCount).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(settled).rejects.toThrow("Pi process exited before the RPC response arrived");
+    closeChild(child);
+  });
+
+  it("prefers a recorded matching response after close even when its deadline has elapsed", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const child = makeChild((_chunk, _encoding, callback) => callback());
+    const rpc = makeRpcClient(child as never, Date.now() + 15_000, 1);
+    const record = { type: "agent_settled" };
+    child.stdout.write(JSON.stringify(record));
+    child.emit("close", 0, null);
+
+    await expect(rpc.waitFor((entry) => entry.type === "agent_settled", Date.now() - 1)).resolves.toEqual(record);
+    expect(rpc.pendingWaiterCount).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    closeChild(child);
+  });
+
+  it("rejects unmatched waits after abnormal close immediately without creating timers", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const child = makeChild((_chunk, _encoding, callback) => callback());
+    const rpc = makeRpcClient(child as never, Date.now() + 15_000, 1);
+    child.emit("close", 1, null);
+
+    const response = rpc.waitFor(() => true);
+    expect(rpc.pendingWaiterCount).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    await expect(response).rejects.toThrow("Pi process exited before the RPC response arrived");
+    closeChild(child);
+  });
+
+  it("does not write new requests to a closed child's stdin", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
+    const write = vi.fn((_chunk, _encoding, callback) => callback());
+    const child = makeChild(write);
+    const rpc = makeRpcClient(child as never, Date.now() + 15_000, 1);
+    child.emit("close", 0, null);
+
+    await expect(rpc.request("get_commands")).rejects.toThrow("Pi process exited before the RPC response arrived");
+    expect(write).not.toHaveBeenCalled();
+    expect(rpc.pendingWaiterCount).toBe(0);
+    expect(vi.getTimerCount()).toBe(0);
+    closeChild(child);
+  });
+
   it("records EPIPE and rejects pending requests without an unhandled stream error", async () => {
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout", "Date"] });
     const pipeError = Object.assign(new Error("broken pipe"), { code: "EPIPE" });

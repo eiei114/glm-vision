@@ -22,6 +22,7 @@ export function makeRpcClient(child, deadlineAt, cleanupGraceMs = 1_000) {
   const waiters = new Set();
   let startError;
   let stdinError;
+  let closed = false;
   const closePromise = new Promise((resolve) => {
     child.once("close", (code, signal) => resolve({ code, signal }));
   });
@@ -79,6 +80,7 @@ export function makeRpcClient(child, deadlineAt, cleanupGraceMs = 1_000) {
     stderr = (stderr + chunk).slice(-16_000);
   });
   child.on("close", () => {
+    closed = true;
     if (stdoutBuffer.trim()) {
       try {
         deliver(JSON.parse(stdoutBuffer));
@@ -111,6 +113,7 @@ export function makeRpcClient(child, deadlineAt, cleanupGraceMs = 1_000) {
     async waitFor(predicate, deadline = deadlineAt) {
       const found = records.find(predicate);
       if (found) return found;
+      if (closed) throw new Error("Pi process exited before the RPC response arrived");
       if (startError) throw new Error(`Pi child failed to start: ${startError}`);
       if (stdinError) throw new Error(`Pi child stdin failed: ${stdinError}`);
       const remaining = deadline - Date.now();
@@ -129,7 +132,7 @@ export function makeRpcClient(child, deadlineAt, cleanupGraceMs = 1_000) {
       const response = this.waitFor(
         (record) => record.type === "response" && record.id === id,
       );
-      if (startError || stdinError) return await response;
+      if (closed || startError || stdinError) return await response;
       try {
         child.stdin.write(`${JSON.stringify({ id, type, ...fields })}\n`);
       } catch (error) {
