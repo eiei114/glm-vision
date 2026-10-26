@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allSemanticAssertionsPassed, containsExpected } from "../scripts/pi-sdk-smoke-contract.mjs";
+import { allSemanticAssertionsPassed, containsExpected, hasExpectedStatusResponse } from "../scripts/pi-sdk-smoke-contract.mjs";
 
 describe("Pi SDK behavior-v2 smoke assertions", () => {
   it("accepts an observed feature response and rejects a missing one", () => {
@@ -19,5 +19,12 @@ describe("Pi SDK behavior-v2 smoke assertions", () => {
     ];
 
     expect(allSemanticAssertionsPassed(reloadAssertions)).toBe(false);
+  });
+
+  it("requires the actual status command disposition and notification", () => {
+    expect(hasExpectedStatusResponse("handled", "glm-vision: ON\nmodel: glm-4.6v")).toBe(true);
+    expect(hasExpectedStatusResponse("handled", "glm-vision: OFF")).toBe(false);
+    expect(hasExpectedStatusResponse("ignored", "glm-vision: ON")).toBe(false);
+    expect(hasExpectedStatusResponse("handled", null)).toBe(false);
   });
 });

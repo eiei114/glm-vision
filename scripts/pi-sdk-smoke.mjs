@@ -5,7 +5,8 @@ import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { allSemanticAssertionsPassed, containsExpected } from "./pi-sdk-smoke-contract.mjs";
+import { allSemanticAssertionsPassed, containsExpected, hasExpectedStatusResponse } from "./pi-sdk-smoke-contract.mjs";
+import { makeRpcClient } from "./pi-sdk-smoke-rpc.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const SDK_VERSIONS = {
@@ -211,130 +212,6 @@ function createIsolatedEnv({ agentDir, homeDir, tempRoot, visionMode, visionLog 
   };
 }
 
-function makeRpcClient(child, deadlineAt) {
-  let stdoutBuffer = "";
-  let stderr = "";
-  let protocolErrors = [];
-  const records = [];
-  const waiters = new Set();
-  let startError;
-  const closePromise = new Promise((resolve) => {
-    child.once("close", (code, signal) => resolve({ code, signal }));
-  });
-
-  child.once("error", (error) => {
-    startError = error.message;
-    for (const waiter of waiters) waiter.reject(new Error(`Pi child failed to start: ${error.message}`));
-    waiters.clear();
-  });
-
-  const deliver = (record) => {
-    records.push(record);
-    for (const waiter of [...waiters]) {
-      if (waiter.predicate(record)) {
-        waiters.delete(waiter);
-        clearTimeout(waiter.timer);
-        waiter.resolve(record);
-      }
-    }
-  };
-
-  child.stdout.setEncoding("utf8");
-  child.stdout.on("data", (chunk) => {
-    stdoutBuffer += chunk;
-    let newline;
-    while ((newline = stdoutBuffer.indexOf("\n")) >= 0) {
-      const line = stdoutBuffer.slice(0, newline).replace(/\r$/, "");
-      stdoutBuffer = stdoutBuffer.slice(newline + 1);
-      if (!line) continue;
-      try {
-        deliver(JSON.parse(line));
-      } catch {
-        protocolErrors.push(line.slice(0, 500));
-      }
-    }
-  });
-  child.stderr.setEncoding("utf8");
-  child.stderr.on("data", (chunk) => {
-    stderr = (stderr + chunk).slice(-16_000);
-  });
-  child.on("close", () => {
-    if (stdoutBuffer.trim()) {
-      try {
-        deliver(JSON.parse(stdoutBuffer));
-      } catch {
-        protocolErrors.push(stdoutBuffer.slice(0, 500));
-      }
-      stdoutBuffer = "";
-    }
-    for (const waiter of waiters) waiter.reject(new Error("Pi process exited before the RPC response arrived"));
-    waiters.clear();
-  });
-
-  return {
-    child,
-    records,
-    get stderr() {
-      return stderr;
-    },
-    get protocolErrors() {
-      return protocolErrors;
-    },
-    get startError() {
-      return startError;
-    },
-    async waitFor(predicate, deadline = deadlineAt) {
-      const found = records.find(predicate);
-      if (found) return found;
-      if (startError) throw new Error(`Pi child failed to start: ${startError}`);
-      const remaining = deadline - Date.now();
-      if (remaining <= 0) throw new Error("Pi RPC probe exceeded its 15s deadline");
-      return new Promise((resolve, reject) => {
-        const waiter = { predicate, resolve, reject, timer: undefined };
-        waiter.timer = setTimeout(() => {
-          waiters.delete(waiter);
-          reject(new Error("Pi RPC probe exceeded its 15s deadline"));
-        }, remaining);
-        waiters.add(waiter);
-      });
-    },
-    async request(type, fields = {}) {
-      const id = `pi-smoke-${records.length}-${type}`;
-      const response = this.waitFor(
-        (record) => record.type === "response" && record.id === id,
-      );
-      child.stdin.write(`${JSON.stringify({ id, type, ...fields })}\n`);
-      const result = await response;
-      if (!result.success) throw new Error(`Pi RPC ${type} failed: ${result.error ?? "unspecified error"}`);
-      return result;
-    },
-    async waitForAgentSettled() {
-      return this.waitFor((record) => record.type === "agent_settled");
-    },
-    async closeGracefully() {
-      if (!child.stdin.destroyed) child.stdin.end();
-      let timedOut = false;
-      let close;
-      try {
-        const remaining = deadlineAt - Date.now();
-        if (remaining <= 0) throw new Error("deadline elapsed before Pi shutdown");
-        close = await waitForClose(closePromise, remaining);
-      } catch {
-        timedOut = true;
-        if (child.pid && child.exitCode === null && child.signalCode === null) {
-          child.kill("SIGKILL");
-        }
-        try {
-          close = await waitForClose(closePromise, CLEANUP_GRACE_MS);
-        } catch {
-          close = { code: null, signal: "cleanup-timeout" };
-        }
-      }
-      return { ...close, timedOut };
-    },
-  };
-}
-
 function waitForClose(closePromise, timeoutMs) {
   return new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error("Pi process close deadline")), timeoutMs);
@@ -380,7 +257,7 @@ function startPiProcess({ cliPath, env, repoRoot }) {
     stdio: ["pipe", "pipe", "pipe"],
     windowsHide: true,
   });
-  return makeRpcClient(child, Date.now() + PROBE_DEADLINE_MS);
+  return makeRpcClient(child, Date.now() + PROBE_DEADLINE_MS, CLEANUP_GRACE_MS);
 }
 
 async function sendPromptAndWait(rpc, message) {
@@ -403,9 +280,10 @@ function inspectProcess(rpc, close, tempRoot) {
     signal: close.signal,
     timed_out: close.timedOut,
     extension_load_errors: loadErrors.length + loadStderr.length,
-    unhandled_errors: extensionErrors.length + unhandledStderr.length + (exitFailure ? 1 : 0),
+    unhandled_errors: extensionErrors.length + unhandledStderr.length + (rpc.stdinError ? 1 : 0) + (exitFailure ? 1 : 0),
     extension_error_records: extensionErrors.length,
     protocol_errors: rpc.protocolErrors.length,
+    stdin_error: rpc.stdinError ?? null,
     stderr: redact(rpc.stderr, tempRoot).trim(),
     rpc_record_types: rpc.records.map((record) => record.type),
   };
@@ -465,7 +343,7 @@ async function runExtensionLoad({ cliPath, env, repoRoot, modelServer, tempRoot,
   return { assertions, exitCode: process.exit_code, process, evidence };
 }
 
-async function runFeatureProcess({ mode, cliPath, env, repoRoot, modelServer, imagePath, tempRoot }) {
+async function runFeatureProcess({ mode, cliPath, env, repoRoot, modelServer, imagePath, tempRoot, statusPrompt }) {
   const visionLog = env.PI_SMOKE_VISION_LOG;
   modelServer.setScenario({
     mode,
@@ -479,9 +357,17 @@ async function runFeatureProcess({ mode, cliPath, env, repoRoot, modelServer, im
   let promptResponse = null;
   let finalText = null;
   let commands = [];
+  let statusResponse = null;
+  let statusNotification = null;
   let failure;
   try {
     commands = (await rpc.request("get_commands")).data?.commands ?? [];
+    if (statusPrompt) {
+      statusResponse = await sendPromptAndWait(rpc, statusPrompt);
+      statusNotification = rpc.records.find(
+        (record) => record.type === "extension_ui_request" && record.method === "notify" && String(record.message).includes("glm-vision: ON"),
+      );
+    }
     promptResponse = await sendPromptAndWait(
       rpc,
       `Use the read tool to inspect this image and describe it: ${imagePath}`,
@@ -504,6 +390,8 @@ async function runFeatureProcess({ mode, cliPath, env, repoRoot, modelServer, im
     tool_result_contains_image: scenario.toolResultContainsImage ?? false,
     final_assistant_text: finalText,
     extension_registered: commands.some((command) => command.name === "glm-vision" && command.source === "extension"),
+    status_prompt_disposition: statusResponse?.data?.disposition ?? null,
+    status_notification: statusNotification?.message ?? null,
     vision_provider_requests: visionRequests,
     prompt_disposition: promptResponse?.data?.disposition ?? null,
     process_exit_code: process.exit_code,
@@ -599,9 +487,14 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
     modelServer,
     imagePath,
     tempRoot,
+    statusPrompt: "/glm-vision status",
   });
   const firstRegistered = firstCommands.some((command) => command.name === "glm-vision" && command.source === "extension");
   const secondRegistered = secondResult.observed.extension_registered === true;
+  const secondStatusHandled = hasExpectedStatusResponse(
+    secondResult.observed.status_prompt_disposition,
+    secondResult.observed.status_notification,
+  );
   const distinctProcesses = firstPid !== null && secondResult.processId !== null && firstPid !== secondResult.processId;
   const responsePassed =
     secondResult.scenario.toolResultContainsDescription === true &&
@@ -617,10 +510,11 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
   const assertions = [
     assertion(
       "reloaded_extension_registered",
-      "a distinct second Pi process registers glm-vision and completes a status command",
-      `distinct_processes=${distinctProcesses}; first_registered=${firstRegistered}; second_read_cycle=${secondRegistered}; ` +
-        `first_status=${firstPrompt?.data?.disposition ?? "missing"}`,
-      firstRegistered && firstPrompt?.data?.disposition === "handled" && secondRegistered && distinctProcesses,
+      "a distinct second Pi process registers glm-vision and handles /glm-vision status with the ON notification",
+      `distinct_processes=${distinctProcesses}; first_registered=${firstRegistered}; first_status=${firstPrompt?.data?.disposition ?? "missing"}; ` +
+        `second_registered=${secondRegistered}; second_status=${secondResult.observed.status_prompt_disposition ?? "missing"}; ` +
+        `second_notification=${containsExpected(String(secondResult.observed.status_notification), "glm-vision: ON") ? "glm-vision: ON" : "missing"}`,
+      firstRegistered && firstPrompt?.data?.disposition === "handled" && secondRegistered && secondStatusHandled && distinctProcesses,
     ),
     assertion(
       "reloaded_feature_response",
@@ -647,6 +541,8 @@ async function runReloadCase({ cliPath, envForMode, repoRoot, modelServer, image
       processes: [firstProcess, secondResult.process],
       distinct_processes: distinctProcesses,
       first_status_disposition: firstPrompt?.data?.disposition ?? null,
+      second_status_disposition: secondResult.observed.status_prompt_disposition,
+      second_status_notification: secondResult.observed.status_notification,
       second_process: secondResult.observed,
     },
   };

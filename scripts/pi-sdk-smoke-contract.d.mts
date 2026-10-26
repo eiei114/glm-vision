@@ -6,4 +6,5 @@ export interface SemanticAssertion {
 }
 
 export function containsExpected(observed: string, expected: string): boolean;
+export function hasExpectedStatusResponse(disposition: string | null, notification: string | null): boolean;
 export function allSemanticAssertionsPassed(assertions: readonly SemanticAssertion[]): boolean;

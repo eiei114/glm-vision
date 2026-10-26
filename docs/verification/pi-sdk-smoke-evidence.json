@@ -30,6 +30,7 @@
         "unhandled_errors": 0,
         "extension_error_records": 0,
         "protocol_errors": 0,
+        "stdin_error": null,
         "stderr": "",
         "rpc_record_types": [
           "response",
@@ -62,6 +63,7 @@
         "unhandled_errors": 0,
         "extension_error_records": 0,
         "protocol_errors": 0,
+        "stdin_error": null,
         "stderr": "",
         "rpc_record_types": [
           "response",
@@ -104,6 +106,8 @@
         "tool_result_contains_image": false,
         "final_assistant_text": "SMOKE_FEATURE_PATH_FINAL",
         "extension_registered": true,
+        "status_prompt_disposition": null,
+        "status_notification": null,
         "vision_provider_requests": [
           {
             "model": "glm-4.6v",
@@ -127,6 +131,7 @@
         "unhandled_errors": 0,
         "extension_error_records": 0,
         "protocol_errors": 0,
+        "stdin_error": null,
         "stderr": "",
         "rpc_record_types": [
           "response",
@@ -169,6 +174,8 @@
         "tool_result_contains_image": true,
         "final_assistant_text": "SMOKE_ERROR_PATH_FINAL",
         "extension_registered": true,
+        "status_prompt_disposition": null,
+        "status_notification": null,
         "vision_provider_requests": [
           {
             "model": "glm-4.6v",
@@ -205,6 +212,7 @@
           "unhandled_errors": 0,
           "extension_error_records": 0,
           "protocol_errors": 0,
+          "stdin_error": null,
           "stderr": "",
           "rpc_record_types": [
             "response",
@@ -220,8 +228,11 @@
           "unhandled_errors": 0,
           "extension_error_records": 0,
           "protocol_errors": 0,
+          "stdin_error": null,
           "stderr": "",
           "rpc_record_types": [
+            "response",
+            "extension_ui_request",
             "response",
             "response",
             "agent_start",
@@ -255,6 +266,8 @@
       ],
       "distinct_processes": true,
       "first_status_disposition": "handled",
+      "second_status_disposition": "handled",
+      "second_status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\reload-second-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\reload-second-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
       "second_process": {
         "model_requests": 2,
         "provider_model": "glm-4.6",
@@ -265,6 +278,8 @@
         "tool_result_contains_image": false,
         "final_assistant_text": "SMOKE_FEATURE_PATH_FINAL",
         "extension_registered": true,
+        "status_prompt_disposition": "handled",
+        "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\reload-second-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\reload-second-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
         "vision_provider_requests": [
           {
             "model": "glm-4.6v",

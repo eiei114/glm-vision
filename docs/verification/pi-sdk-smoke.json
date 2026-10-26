@@ -64,8 +64,8 @@
       "assertions": [
         {
           "id": "reloaded_extension_registered",
-          "expected": "a distinct second Pi process registers glm-vision and completes a status command",
-          "observed": "distinct_processes=true; first_registered=true; second_read_cycle=true; first_status=handled",
+          "expected": "a distinct second Pi process registers glm-vision and handles /glm-vision status with the ON notification",
+          "observed": "distinct_processes=true; first_registered=true; first_status=handled; second_registered=true; second_status=handled; second_notification=glm-vision: ON",
           "passed": true
         },
         {
