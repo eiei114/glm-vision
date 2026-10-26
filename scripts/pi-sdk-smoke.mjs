@@ -37,7 +37,12 @@ function assertion(id, expected, observed, passed = containsExpected(observed, e
 }
 
 function redact(text, tempRoot) {
-  return String(text ?? "").replaceAll(tempRoot, "<isolated-temp>").replaceAll(ROOT, "<repo>");
+  const escapeBackslashes = (value) => value.replaceAll("\\", "\\\\");
+  return String(text ?? "")
+    .replaceAll(tempRoot, "<isolated-temp>")
+    .replaceAll(escapeBackslashes(tempRoot), "<isolated-temp>")
+    .replaceAll(ROOT, "<repo>")
+    .replaceAll(escapeBackslashes(ROOT), "<repo>");
 }
 
 function safeSummary(value, tempRoot) {

@@ -42,14 +42,14 @@
         "description": "Configure GLM vision model, prompt presets, response cache, and Coding Plan checks. Prefer colon commands such as /glm-vision:status.",
         "source": "extension",
         "sourceInfo": {
-          "path": "C:\\Users\\Keisu\\multica_workspaces_desktop-api.multica.ai\\dotfield-9ac157d3a1bf\\dot-2853-a375851b8c23\\workdir\\glm-vision\\src\\index.ts",
+          "path": "<repo>\\src\\index.ts",
           "source": "cli",
           "scope": "temporary",
           "origin": "top-level"
         }
       },
       "status_prompt_disposition": "handled",
-      "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: C:\\Users\\Keisu\\AppData\\Local\\Temp\\glm-vision-pi-sdk-smoke-H0FHo7\\extension-load-home\\.pi\\glm-vision.json\ncache file: C:\\Users\\Keisu\\AppData\\Local\\Temp\\glm-vision-pi-sdk-smoke-H0FHo7\\extension-load-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+      "status_notification": "glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\extension-load-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\extension-load-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
       "vision_provider_requests": 0
     },
     "happy_path": {
