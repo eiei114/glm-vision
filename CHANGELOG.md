@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.9] - 2026-10-26
+
+### Changed
+
+- Pin Pi SDK 1.2.0 for development and verify extension behavior in a real Pi host.
+
 ## 1.4.7 - 2026-09-27
 
 - chore: periodic patch bump after 7+ days without npm publish

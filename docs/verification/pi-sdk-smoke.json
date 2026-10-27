@@ -1,0 +1,101 @@
+{
+  "schema_version": 1,
+  "verification_contract": "pi-sdk-behavior-v2",
+  "sdk_versions": {
+    "@earendil-works/pi-agent-core": "1.2.0",
+    "@earendil-works/pi-ai": "1.2.0",
+    "@earendil-works/pi-coding-agent": "1.2.0",
+    "@earendil-works/pi-tui": "1.2.0"
+  },
+  "extension_load_errors": 0,
+  "unhandled_errors": 0,
+  "cases": [
+    {
+      "name": "extension_load",
+      "command": "npm run smoke:pi",
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "docs/verification/pi-sdk-smoke-evidence.json#cases.extension_load",
+      "assertions": [
+        {
+          "id": "extension_registered",
+          "expected": "get_commands lists glm-vision as an extension and /glm-vision status is handled with the ON notification",
+          "observed": "command=glm-vision:extension; disposition=handled; notify=glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>/extension-load-home/.pi/glm-vision.json\ncache file: <isolated-temp>/extension-load-home/.pi/glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "happy_path",
+      "command": "npm run smoke:pi",
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "docs/verification/pi-sdk-smoke-evidence.json#cases.happy_path",
+      "assertions": [
+        {
+          "id": "feature_response",
+          "expected": "SMOKE_VISION_DESCRIPTION reaches the next Pi model request",
+          "observed": "description=true; final=SMOKE_FEATURE_PATH_FINAL; vision_requests=1",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "error_path",
+      "command": "npm run smoke:pi",
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "docs/verification/pi-sdk-smoke-evidence.json#cases.error_path",
+      "assertions": [
+        {
+          "id": "handled_error",
+          "expected": "handled HTTP 500 and preserved the read image",
+          "observed": "error=true; image=true; vision_attempts=3; final=SMOKE_ERROR_PATH_FINAL",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "reload_cleanup",
+      "command": "npm run smoke:pi",
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "docs/verification/pi-sdk-smoke-evidence.json#cases.reload_cleanup",
+      "assertions": [
+        {
+          "id": "reloaded_extension_registered",
+          "expected": "a distinct second Pi process registers glm-vision and handles /glm-vision status with the ON notification",
+          "observed": "distinct_processes=true; first_registered=true; first_status=handled; second_registered=true; second_status=handled; second_notification=glm-vision: ON",
+          "passed": true
+        },
+        {
+          "id": "reloaded_feature_response",
+          "expected": "the second process receives SMOKE_VISION_DESCRIPTION from the actual extension tool_result path",
+          "observed": "tool_result=true; final=SMOKE_FEATURE_PATH_FINAL; vision_requests=1",
+          "passed": true
+        },
+        {
+          "id": "clean_shutdown",
+          "expected": "both actual Pi processes exit normally after RPC stdin closes, without timeout or shutdown errors",
+          "observed": "first_exit=0; second_exit=0; first_timeout=false; second_timeout=false; shutdown_errors=0",
+          "passed": true
+        }
+      ]
+    },
+    {
+      "name": "host_shell",
+      "command": "npm run smoke:pi",
+      "exit_code": 0,
+      "passed": true,
+      "evidence": "docs/verification/pi-sdk-smoke-evidence.json#cases.host_shell",
+      "assertions": [
+        {
+          "id": "native_shell_boundary",
+          "expected": "native shell launches pinned Pi CLI 1.2.0 and returns its version",
+          "observed": "shell=/bin/sh; version=1.2.0; stderr=; exit=0",
+          "passed": true
+        }
+      ]
+    }
+  ]
+}
