@@ -2,12 +2,12 @@
   "schema_version": 1,
   "verification_contract": "pi-sdk-behavior-v2",
   "command": "npm run smoke:pi",
-  "cli_version": "1.4.0",
+  "cli_version": "1.5.0",
   "sdk_versions": {
-    "@earendil-works/pi-agent-core": "1.4.0",
-    "@earendil-works/pi-ai": "1.4.0",
-    "@earendil-works/pi-coding-agent": "1.4.0",
-    "@earendil-works/pi-tui": "1.4.0"
+    "@earendil-works/pi-agent-core": "1.5.0",
+    "@earendil-works/pi-ai": "1.5.0",
+    "@earendil-works/pi-coding-agent": "1.5.0",
+    "@earendil-works/pi-tui": "1.5.0"
   },
   "host_platform": "win32",
   "isolation": {
@@ -296,7 +296,7 @@
       "command": "npm run smoke:pi",
       "shell": "PowerShell -NoProfile -NonInteractive",
       "shell_command": "-NoLogo -NoProfile -NonInteractive -File <isolated-temp>\\host-shell-smoke.ps1",
-      "stdout": "1.4.0",
+      "stdout": "1.5.0",
       "stdout_capture": "PowerShell wrote native command output to an isolated temporary file",
       "stderr": "",
       "exit_code": 0,
