@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.12] - 2026-11-07
+
+### Changed
+
+- Update the exact development Pi SDK pins to 1.5.0 and verify glm-vision in the actual Pi host.
+
 ## [1.4.11] - 2026-11-07
 
 ### Fixed
