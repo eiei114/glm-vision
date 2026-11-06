@@ -34,7 +34,7 @@ pi install npm:glm-vision
 Pin a specific version when you want reproducible installs:
 
 ```bash
-pi install npm:glm-vision@1.4.9
+pi install npm:glm-vision@1.4.10
 ```
 
 Install into the current project instead of your user Pi settings:
