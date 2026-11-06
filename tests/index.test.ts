@@ -157,6 +157,31 @@ describe("vision API", () => {
     expect(body).toMatchObject({ model: "glm-4.6v", max_tokens: 4096 });
     expect(body.messages[0].content[2].image_url.url).toBe("data:image/png;base64,abc");
   });
+
+  it("preserves the parser error as the cause for invalid JSON responses", async () => {
+    const parseError = new SyntaxError("unexpected token");
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        json: async () => {
+          throw parseError;
+        },
+      })),
+    );
+
+    await expect(
+      describeImage(
+        { base64: "abc", mediaType: "image/png" },
+        "glm-4.6v",
+        "describe it",
+        "secret",
+      ),
+    ).rejects.toMatchObject({
+      message: "Z.AI returned invalid JSON: unexpected token",
+      cause: parseError,
+    });
+  });
 });
 
 describe("extension behavior", () => {

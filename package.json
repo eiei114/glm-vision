@@ -1,6 +1,6 @@
 {
   "name": "glm-vision",
-  "version": "1.4.10",
+  "version": "1.4.11",
   "description": "Pi extension that gives non-vision GLM models (z.ai) image understanding via GLM-4.6V",
   "main": "src/index.ts",
   "files": [
@@ -52,7 +52,7 @@
     "@eslint/js": "^10.0.1",
     "@types/node": "^26.6.6",
     "eslint": "^10.14.0",
-    "typescript": "^7.0.2",
+    "typescript": "^6.0.3",
     "typescript-eslint": "^8.72.1",
     "vitest": "^5.1.0"
   }
