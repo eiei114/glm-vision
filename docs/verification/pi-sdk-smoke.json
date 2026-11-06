@@ -2,10 +2,10 @@
   "schema_version": 1,
   "verification_contract": "pi-sdk-behavior-v2",
   "sdk_versions": {
-    "@earendil-works/pi-agent-core": "1.2.0",
-    "@earendil-works/pi-ai": "1.2.0",
-    "@earendil-works/pi-coding-agent": "1.2.0",
-    "@earendil-works/pi-tui": "1.2.0"
+    "@earendil-works/pi-agent-core": "1.4.0",
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-coding-agent": "1.4.0",
+    "@earendil-works/pi-tui": "1.4.0"
   },
   "extension_load_errors": 0,
   "unhandled_errors": 0,
@@ -20,7 +20,7 @@
         {
           "id": "extension_registered",
           "expected": "get_commands lists glm-vision as an extension and /glm-vision status is handled with the ON notification",
-          "observed": "command=glm-vision:extension; disposition=handled; notify=glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>/extension-load-home/.pi/glm-vision.json\ncache file: <isolated-temp>/extension-load-home/.pi/glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
+          "observed": "command=glm-vision:extension; disposition=handled; notify=glm-vision: ON\nmodel: glm-4.6v\nprompt: default\ncache: ON (0 entries, max 100)\nconfig: <isolated-temp>\\extension-load-home\\.pi\\glm-vision.json\ncache file: <isolated-temp>\\extension-load-home\\.pi\\glm-vision-cache.json\nmaxImages: 4\nrequest timeout: 30s\nactive prompt: Describe this image in detail. If it contains text, transcribe it exactly. If it shows code, reproduce the code. If it shows a UI, describe the layout and elements. Respond in the same language as any text in the image.",
           "passed": true
         }
       ]
@@ -91,8 +91,8 @@
       "assertions": [
         {
           "id": "native_shell_boundary",
-          "expected": "native shell launches pinned Pi CLI 1.2.0 and returns its version",
-          "observed": "shell=/bin/sh; version=1.2.0; stderr=; exit=0",
+          "expected": "native shell launches pinned Pi CLI 1.4.0 and returns its version",
+          "observed": "shell=PowerShell; version=1.4.0; stderr=; exit=0",
           "passed": true
         }
       ]

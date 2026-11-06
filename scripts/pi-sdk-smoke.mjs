@@ -7,14 +7,12 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { allSemanticAssertionsPassed, containsExpected, hasExpectedStatusResponse } from "./pi-sdk-smoke-contract.mjs";
 import { makeRpcClient } from "./pi-sdk-smoke-rpc.mjs";
+import { pinnedSdkVersions, sdkVersionMismatches } from "./pi-sdk-versions.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const SDK_VERSIONS = {
-  "@earendil-works/pi-agent-core": "1.2.0",
-  "@earendil-works/pi-ai": "1.2.0",
-  "@earendil-works/pi-coding-agent": "1.2.0",
-  "@earendil-works/pi-tui": "1.2.0",
-};
+// Expected versions come from the repository's own dependency pin, so a
+// dependency bump never fails the harness merely because the pin moved.
+const SDK_VERSIONS = pinnedSdkVersions(requireManifest("package.json"));
 const PROBE_DEADLINE_MS = 15_000;
 const CLEANUP_GRACE_MS = 1_000;
 const REPORT_PATH = path.join(ROOT, "docs", "verification", "pi-sdk-smoke.json");
@@ -27,6 +25,10 @@ const PNG_BASE64 =
 function packageManifest(packageName) {
   const packagePath = path.join(ROOT, "node_modules", ...packageName.split("/"), "package.json");
   return JSON.parse(requireText(packagePath));
+}
+
+function requireManifest(relativePath) {
+  return JSON.parse(requireText(path.join(ROOT, relativePath)));
 }
 
 function requireText(filePath) {
@@ -658,10 +660,9 @@ async function main() {
   const installedVersions = Object.fromEntries(
     Object.keys(SDK_VERSIONS).map((packageName) => [packageName, packageManifest(packageName).version]),
   );
-  for (const [packageName, expected] of Object.entries(SDK_VERSIONS)) {
-    if (installedVersions[packageName] !== expected) {
-      throw new Error(`${packageName} must be ${expected}; installed ${installedVersions[packageName] ?? "missing"}`);
-    }
+  const versionMismatches = sdkVersionMismatches(SDK_VERSIONS, installedVersions);
+  if (versionMismatches.length > 0) {
+    throw new Error(versionMismatches.join("; "));
   }
 
   const codingAgent = packageManifest("@earendil-works/pi-coding-agent");

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.10] - 2026-11-05
+
+### Changed
+
+- Resolve the Pi SDK versions the behavior smoke harness expects from the `package.json` pin instead of a hard-coded `1.2.0` map, so a dependency bump no longer fails CI on a stale version literal.
+- Update the development Pi SDK to 1.4.0 and re-verify extension behavior against it in a real Pi host.
+
 ## [1.4.9] - 2026-10-26
 
 ### Changed
