@@ -579,7 +579,9 @@ async function fetchWithRetry(
     } catch (err: any) {
       lastError = explainFetchError(err, timeoutMs);
       if (attempt === MAX_ATTEMPTS || /cancelled|aborted/i.test(lastError)) {
-        throw new Error(`${lastError} after ${attempt} attempt${attempt === 1 ? "" : "s"}.`);
+        throw new Error(`${lastError} after ${attempt} attempt${attempt === 1 ? "" : "s"}.`, {
+          cause: err,
+        });
       }
     } finally {
       cleanup();
@@ -649,7 +651,9 @@ export async function describeImages(
   try {
     json = await res.json();
   } catch (err: any) {
-    throw new Error(`Z.AI returned invalid JSON: ${err?.message || String(err)}`);
+    throw new Error(`Z.AI returned invalid JSON: ${err?.message || String(err)}`, {
+      cause: err,
+    });
   }
 
   const description = json?.choices?.[0]?.message?.content;

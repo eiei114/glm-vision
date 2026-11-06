@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.4.11] - 2026-11-07
+
+### Fixed
+
+- Preserve caught errors as `cause` when reporting failed requests and invalid JSON.
+
 ## [1.4.10] - 2026-11-05
 
 ### Changed
