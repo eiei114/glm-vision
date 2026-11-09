@@ -57,6 +57,10 @@ This project follows [Semantic Versioning](https://semver.org/) for public packa
 
 ## [Unreleased]
 
+### Changed
+
+- Split the TypeScript development toolchain: `tsc` is now TypeScript 7.0.2 via the documented `@typescript/native` alias, while the `typescript` peer used by `typescript-eslint` stays on the TypeScript 6.0 API (`npm:@typescript/typescript6`). TypeScript 7.0 ships no compiler API, so `typescript-eslint` refuses to load when `typescript` resolves to 7.x.
+
 ## [1.4.3] - 2026-08-22
 
 ### Changed
