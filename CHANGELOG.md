@@ -10,6 +10,10 @@
 
 - Cover the Z.AI retry contract in `tests/http-retry.test.ts`: retry-then-success, non-retryable `400`/`401`/`403`/`404` messages, retryable statuses exhausting 3 attempts with the 500ms/1000ms backoff, error-body precedence, timeout, cancellation, and empty-response handling.
 
+### Documentation
+
+- Note next to the README install pin that `1.4.13` only becomes installable after a maintainer runs the `Auto Release` workflow; until then `1.4.12` stays the newest published version.
+
 ## [1.4.12] - 2026-11-07
 
 ### Changed
