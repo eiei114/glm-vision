@@ -53,7 +53,7 @@ export interface VisionConfig {
   requestTimeoutMs?: number;
 }
 
-interface CacheEntry {
+export interface CacheEntry {
   createdAt: string;
   description: string;
   imageHash: string;
@@ -65,7 +65,7 @@ interface CacheEntry {
   promptMode: PromptMode;
 }
 
-interface CacheFile {
+export interface CacheFile {
   version: 1;
   entries: Record<string, CacheEntry>;
 }
@@ -263,7 +263,7 @@ export function saveConfig(c: VisionConfig, configPath = getConfigPath()) {
 }
 
 // -- Cache ------------------------------------------------------
-function loadCache(cachePath = getCachePath()): CacheFile {
+export function loadCache(cachePath = getCachePath()): CacheFile {
   try {
     const raw = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
     if (raw?.version === 1 && raw.entries && typeof raw.entries === "object" && !Array.isArray(raw.entries)) {
@@ -275,7 +275,7 @@ function loadCache(cachePath = getCachePath()): CacheFile {
   return { version: 1, entries: {} };
 }
 
-function saveCache(cache: CacheFile, cachePath = getCachePath()) {
+export function saveCache(cache: CacheFile, cachePath = getCachePath()) {
   fs.mkdirSync(path.dirname(cachePath), { recursive: true });
   fs.writeFileSync(cachePath, JSON.stringify(cache, null, 2));
 }
@@ -302,14 +302,14 @@ function hashImage(img: ImageData): string {
   return hash(Buffer.from(img.base64 || "", "base64"));
 }
 
-function makeCacheKey(images: ImageData[], model: string, prompt: string): string {
+export function makeCacheKey(images: ImageData[], model: string, prompt: string): string {
   const imageHashes = images.map(hashImage);
   const mediaTypes = images.map((img) => img.mediaType || "unknown");
   const urls = images.map((img) => img.url);
   return hash(JSON.stringify({ imageHashes, mediaTypes, urls, model, prompt }));
 }
 
-function makeCacheEntry(images: ImageData[], model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
+export function makeCacheEntry(images: ImageData[], model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
   const imageHashes = images.map(hashImage);
   return {
     createdAt: new Date().toISOString(),
@@ -326,18 +326,18 @@ function makeCacheEntry(images: ImageData[], model: string, prompt: string, mode
   };
 }
 
-function pruneCache(cache: CacheFile, maxEntries: number) {
+export function pruneCache(cache: CacheFile, maxEntries: number) {
   const entries = Object.entries(cache.entries).sort(
     ([, a], [, b]) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
   );
   cache.entries = Object.fromEntries(entries.slice(0, maxEntries));
 }
 
-function cacheStats(cachePath = getCachePath()): { entries: number; path: string } {
+export function cacheStats(cachePath = getCachePath()): { entries: number; path: string } {
   return { entries: Object.keys(loadCache(cachePath).entries).length, path: cachePath };
 }
 
-function clearCache(cachePath = getCachePath()) {
+export function clearCache(cachePath = getCachePath()) {
   saveCache({ version: 1, entries: {} }, cachePath);
 }
 
