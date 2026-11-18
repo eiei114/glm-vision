@@ -566,7 +566,8 @@ async function fetchWithRetry(
   let lastError: string | undefined;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
-    const { signal, cleanup } = createTimeoutSignal(init.signal || undefined, timeoutMs);
+    const callerSignal = init.signal || undefined;
+    const { signal, cleanup } = createTimeoutSignal(callerSignal, timeoutMs);
 
     try {
       const res = await fetch(url, { ...init, signal });
@@ -577,6 +578,12 @@ async function fetchWithRetry(
 
       lastError = explainHttpError(res.status, await readErrorBody(res), model);
     } catch (err: any) {
+      // A caller abort and a per-attempt timeout both reject with an
+      // AbortError, so the caller signal decides which message the user sees.
+      if (callerSignal?.aborted) {
+        throw new Error("Z.AI request was cancelled", { cause: err });
+      }
+
       lastError = explainFetchError(err, timeoutMs);
       if (attempt === MAX_ATTEMPTS || /cancelled|aborted/i.test(lastError)) {
         throw new Error(`${lastError} after ${attempt} attempt${attempt === 1 ? "" : "s"}.`, {
@@ -587,7 +594,11 @@ async function fetchWithRetry(
       cleanup();
     }
 
-    await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), init.signal || undefined);
+    try {
+      await sleep(RETRY_BASE_DELAY_MS * 2 ** (attempt - 1), callerSignal);
+    } catch (err: any) {
+      throw new Error("Z.AI request was cancelled", { cause: err });
+    }
   }
 
   throw new Error(lastError || "Z.AI request failed.");

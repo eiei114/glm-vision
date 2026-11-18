@@ -34,8 +34,10 @@ pi install npm:glm-vision
 Pin a specific version when you want reproducible installs:
 
 ```bash
-pi install npm:glm-vision@1.4.12
+pi install npm:glm-vision@1.4.13
 ```
+
+> **Heads-up before pinning:** `1.4.13` reaches npm only after a maintainer runs the `Auto Release` workflow for the version that landed on `main`. Until that workflow runs, `glm-vision@1.4.12` stays the newest published version, so the unpinned install above still gives you `1.4.12` and the pinned command fails with `E404`. Check the published versions on [npm](https://www.npmjs.com/package/glm-vision) before pinning.
 
 Install into the current project instead of your user Pi settings:
 
