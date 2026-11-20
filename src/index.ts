@@ -386,7 +386,13 @@ export function normalizeRequestTimeoutMs(value: unknown): number {
   return Math.min(Math.max(Math.round(value), MIN_REQUEST_TIMEOUT_MS), MAX_REQUEST_TIMEOUT_MS);
 }
 
+function isContentBlock(value: unknown): value is Record<string, any> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
 function extractImageFromBlock(block: any): ImageData | null {
+  if (!isContentBlock(block)) return null;
+
   if (block.type === "image" && block.source?.data) {
     return {
       base64: block.source.data,
@@ -440,7 +446,9 @@ export function countExtractableImages(content: any[]): number {
 
 /** Return whether Pi message content includes image or image_url blocks. */
 export function hasImageContent(content: any[]): boolean {
-  return content.some((b) => b.type === "image" || b.type === "image_url");
+  return content.some(
+    (block) => isContentBlock(block) && (block.type === "image" || block.type === "image_url"),
+  );
 }
 
 /** Build the user prompt sent to the vision model, including image labels and skip notes. */
@@ -767,7 +775,9 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       if (!images.length) return;
       const skippedCount = Math.max(0, totalImages - images.length);
 
-      const originalImages = content.filter((b: any) => b.type === "image" || b.type === "image_url");
+      const originalImages = content.filter(
+        (block: unknown) => isContentBlock(block) && (block.type === "image" || block.type === "image_url"),
+      );
 
       if (configWarning) {
         return {

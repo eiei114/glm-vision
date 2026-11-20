@@ -86,6 +86,29 @@ describe("image extraction", () => {
     expect(extractImages(content)).toEqual([]);
   });
 
+  it("ignores malformed content entries while detecting and extracting images", () => {
+    const malformed = [null, undefined, "text", 42, true, [], {}];
+
+    expect(hasImageContent(malformed)).toBe(false);
+    expect(countExtractableImages(malformed)).toBe(0);
+    expect(extractImages(malformed)).toEqual([]);
+
+    const content = [
+      ...malformed,
+      { type: "image", data: "AAA", mediaType: "image/png" },
+      null,
+      "also malformed",
+      { type: "image_url", image_url: { url: "https://example.test/image.jpg" } },
+    ];
+
+    expect(hasImageContent(content)).toBe(true);
+    expect(countExtractableImages(content)).toBe(2);
+    expect(extractImages(content)).toEqual([
+      { index: 1, label: "Image 1", base64: "AAA", mediaType: "image/png" },
+      { index: 2, label: "Image 2", url: "https://example.test/image.jpg" },
+    ]);
+  });
+
   it("normalizeMaxImages falls back and clamps invalid values", () => {
     expect(normalizeMaxImages(undefined)).toBe(4);
     expect(normalizeMaxImages(0)).toBe(1);

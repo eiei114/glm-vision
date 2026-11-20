@@ -152,7 +152,7 @@ describe("vision API", () => {
         headers: expect.objectContaining({ Authorization: "Bearer secret" }),
       }),
     );
-    const [, requestInit] = fetchMock.mock.calls[0] as [string, RequestInit];
+    const [, requestInit] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
     const body = JSON.parse(requestInit.body as string);
     expect(body).toMatchObject({ model: "glm-4.6v", max_tokens: 4096 });
     expect(body.messages[0].content[2].image_url.url).toBe("data:image/png;base64,abc");
@@ -208,6 +208,32 @@ describe("extension behavior", () => {
       },
       imageBlock,
     ]);
+  });
+
+  it("processes a valid image in a tool result containing malformed blocks", async () => {
+    const fetchMock = vi.fn(async (_url: string, _init?: RequestInit) => ({
+      ok: true,
+      json: async () => ({ choices: [{ message: { content: "image description" } }] }),
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { handlers } = setupExtension();
+    const imageBlock = { type: "image", data: "abc", mediaType: "image/png" };
+
+    const result = await handlers.get("tool_result")?.(
+      { toolName: "read", content: [null, "malformed", 12, [], imageBlock] },
+      {
+        model: { provider: "zai" },
+        modelRegistry: { getApiKeyForProvider: vi.fn(async () => "secret") },
+      },
+    );
+
+    expect(result.content).toEqual([
+      { type: "text", text: "[glm-vision: glm-4.6v | images: 1]\n\nimage description" },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const requestInit = fetchMock.mock.calls[0][1];
+    const requestContent = JSON.parse(requestInit?.body as string).messages[0].content;
+    expect(requestContent.at(-1).image_url.url).toBe("data:image/png;base64,abc");
   });
 
   it("does not intercept non-zai models", async () => {
