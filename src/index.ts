@@ -213,7 +213,7 @@ function normalizeConfig(raw: Partial<VisionConfig>, warnings: string[] = []): V
     config.requestTimeoutMs = normalized;
     if (raw.requestTimeoutMs !== normalized) {
       warnings.push(
-        `requestTimeoutMs must be a finite number between ${MIN_REQUEST_TIMEOUT_MS} and ${MAX_REQUEST_TIMEOUT_MS}. Using ${DEFAULT_REQUEST_TIMEOUT_MS}.`,
+        `requestTimeoutMs must be an integer between ${MIN_REQUEST_TIMEOUT_MS} and ${MAX_REQUEST_TIMEOUT_MS} milliseconds. Using ${normalized} ms.`,
       );
     }
   }

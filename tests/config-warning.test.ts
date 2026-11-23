@@ -167,6 +167,34 @@ describe("malformed config warnings", () => {
     expect(text).toContain("cache: ON (0 entries, max 100)");
   });
 
+  it.each([
+    { input: 999, expected: 1_000, warns: true },
+    { input: 600_001, expected: 600_000, warns: true },
+    { input: 12_345.6, expected: 12_346, warns: true },
+    { input: "12000", expected: 30_000, warns: true },
+    { input: 12_000, expected: 12_000, warns: false },
+  ])("reports the effective request timeout for $input ms (warning: $warns)", async ({ input, expected, warns }) => {
+    const { commands, configPath } = setupExtension(JSON.stringify({ requestTimeoutMs: input }));
+    const fetchMock = stubSuccessfulFetch("should not be called");
+    const notify = vi.fn();
+
+    await commands.get("glm-vision:status")?.handler("", { ui: { notify } });
+
+    const [text, level] = notify.mock.lastCall ?? [];
+    const resolved = loadConfig(configPath).requestTimeoutMs;
+    expect(resolved).toBe(expected);
+    expect(text).toContain(`request timeout: ${expected / 1000}s`);
+    expect(level).toBe(warns ? "warning" : "info");
+    if (warns) {
+      expect(text).toContain(
+        `requestTimeoutMs must be an integer between 1000 and 600000 milliseconds. Using ${resolved} ms.`,
+      );
+    } else {
+      expect(text).not.toContain("warning:");
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   it("clears the warning after session_start reloads a repaired config", async () => {
     const { handlers, commands, configPath } = setupExtension("{ broken");
     const fetchMock = stubSuccessfulFetch("a repaired description");
