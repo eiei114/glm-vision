@@ -403,20 +403,25 @@ function isContentBlock(value: unknown): value is Record<string, any> {
 function extractImageFromBlock(block: any): ImageData | null {
   if (!isContentBlock(block)) return null;
 
-  if (block.type === "image" && block.source?.data) {
-    return {
-      base64: block.source.data,
-      mediaType: block.source.mediaType || block.source.media_type || "image/png",
-    };
+  if (block.type === "image") {
+    const sourceData = block.source?.data;
+    if (typeof sourceData === "string" && sourceData) {
+      return {
+        base64: sourceData,
+        mediaType: block.source.mediaType || block.source.media_type || "image/png",
+      };
+    }
+    const data = block.data;
+    if (typeof data === "string" && data) {
+      return {
+        base64: data,
+        mediaType: block.mediaType || block.media_type || "image/png",
+      };
+    }
   }
-  if (block.type === "image" && block.data) {
-    return {
-      base64: block.data,
-      mediaType: block.mediaType || block.media_type || "image/png",
-    };
-  }
-  if (block.type === "image_url" && block.image_url?.url) {
-    const url = block.image_url.url;
+  if (block.type === "image_url") {
+    const url = block.image_url?.url;
+    if (typeof url !== "string" || !url) return null;
     if (url.startsWith("data:")) {
       const match = url.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.+)$/s);
       if (match) return { base64: match[2], mediaType: match[1] };

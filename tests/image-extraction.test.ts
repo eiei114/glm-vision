@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildVisionRequestContent,
   countExtractableImages,
+  extractImage,
   extractImages,
   formatVisionResult,
   hasImageContent,
@@ -42,6 +43,31 @@ describe("image extraction", () => {
       ["Image 2", "BBB", "image/jpeg"],
       ["Image 3", "CCC", "image/webp"],
       ["Image 4", "https://example.test/image.png", undefined],
+    ]);
+  });
+
+  it.each([
+    ["image_url.url", { type: "image_url", image_url: { url: 42 } }],
+    ["source.data", { type: "image", source: { data: { invalid: true } } }],
+    ["data", { type: "image", data: ["AAA"] }],
+  ])("skips a non-string %s without losing valid attachments", (_field, malformed) => {
+    const content = [
+      malformed,
+      { type: "image", source: { data: "AAA", media_type: "image/png" } },
+      malformed,
+      { type: "image", data: "BBB", mediaType: "image/jpeg" },
+      { type: "image_url", image_url: { url: "data:image/webp;base64,CCC" } },
+      malformed,
+      { type: "image_url", image_url: { url: "https://example.test/image.png" } },
+    ];
+
+    expect(extractImage(content)).toEqual({ base64: "AAA", mediaType: "image/png" });
+    expect(countExtractableImages(content)).toBe(4);
+    expect(extractImages(content)).toEqual([
+      { index: 1, label: "Image 1", base64: "AAA", mediaType: "image/png" },
+      { index: 2, label: "Image 2", base64: "BBB", mediaType: "image/jpeg" },
+      { index: 3, label: "Image 3", base64: "CCC", mediaType: "image/webp" },
+      { index: 4, label: "Image 4", url: "https://example.test/image.png" },
     ]);
   });
 
