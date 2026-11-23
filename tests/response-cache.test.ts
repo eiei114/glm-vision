@@ -3,10 +3,13 @@ import * as os from "node:os";
 import * as path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
+  DEFAULT_CONFIG,
+  PRESET_PROMPTS,
   createGlmVisionExtension,
   loadCache,
   loadConfig,
   makeCacheEntry,
+  makeCacheKey,
   pruneCache,
   saveCache,
 } from "../src/index";
@@ -286,6 +289,55 @@ describe("response cache", () => {
     expect(Object.keys(cache.entries)).toHaveLength(1);
   });
 
+  it("misses a malformed matching row, keeps a legacy neighbor, and prunes safely", async () => {
+    const fetchMock = stubFetch(["fresh description"]);
+    const { handlers, cachePath } = setupExtension();
+    const ctx = zaiContext();
+    const neighbor = { ...IMAGE_BLOCK, data: "bmVpZ2hib3I=" };
+    const images = (block: typeof IMAGE_BLOCK) => [{ base64: block.data, mediaType: block.mediaType }];
+    const { model } = DEFAULT_CONFIG;
+    const prompt = PRESET_PROMPTS.default;
+    const badKey = makeCacheKey(images(IMAGE_BLOCK), model, prompt);
+    const legacyKey = makeCacheKey(images(neighbor), model, prompt);
+    const entry = makeCacheEntry(images(neighbor), model, prompt, "default", "legacy description");
+    const { createdAt, description, imageHash, mediaType, promptHash, promptMode } = entry;
+    const legacy = { createdAt, description, imageHash, mediaType, model, promptHash, promptMode };
+
+    fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+    fs.writeFileSync(cachePath, JSON.stringify({
+      version: 1,
+      entries: {
+        [badKey]: { createdAt },
+        [legacyKey]: legacy,
+        nullRow: null,
+        blankDescription: { ...legacy, description: " \t" },
+        numericDescription: { ...legacy, description: 42 },
+        invalidTimestamp: { ...legacy, createdAt: "not a date" },
+        missingTimestamp: { description },
+        numericTimestamp: { ...legacy, createdAt: 0 },
+      },
+    }));
+
+    const cached = await handlers.get("tool_result")?.({ toolName: "read", content: [neighbor] }, ctx);
+    expect(cached.content[0].text).toContain("cache hit");
+    expect(cached.content[0].text).toContain("legacy description");
+    expect(fetchMock).not.toHaveBeenCalled();
+
+    const fresh = await handlers.get("tool_result")?.({ toolName: "read", content: [IMAGE_BLOCK] }, ctx);
+    expect(fresh.content[0].text).toContain("fresh description");
+    expect(fresh.content[0].text).not.toContain("cache hit");
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+
+    // Check the persisted file, not a sanitized view from loadCache.
+    expect(JSON.parse(fs.readFileSync(cachePath, "utf-8"))).toEqual({
+      version: 1,
+      entries: {
+        [badKey]: expect.objectContaining({ description: "fresh description" }),
+        [legacyKey]: legacy,
+      },
+    });
+  });
+
   it("loadCache returns an empty cache for a corrupt file without throwing", () => {
     const dir = tempDir();
     const cachePath = path.join(dir, "glm-vision-cache.json");
@@ -294,7 +346,7 @@ describe("response cache", () => {
     expect(loadCache(cachePath)).toEqual({ version: 1, entries: {} });
   });
 
-  it("pruneCache keeps only the newest entries", () => {
+  it("pruneCache drops malformed rows before keeping the newest entries", () => {
     const cache: any = { version: 1, entries: {} };
     const e1 = makeCacheEntry([{ base64: "a", mediaType: "image/png" }], "m", "p", "default", "old");
     (e1 as any).createdAt = "2026-01-01T00:00:00.000Z";
@@ -302,10 +354,8 @@ describe("response cache", () => {
     (e2 as any).createdAt = "2026-01-01T00:00:01.000Z";
     const e3 = makeCacheEntry([{ base64: "c", mediaType: "image/png" }], "m", "p", "default", "new");
     (e3 as any).createdAt = "2026-01-01T00:00:02.000Z";
-    cache.entries = { a: e1, b: e2, c: e3 };
+    cache.entries = { nullRow: null, invalidTimestamp: { ...e3, createdAt: "invalid" }, a: e1, b: e2, c: e3 };
     pruneCache(cache, 2);
-    const descriptions = Object.values(cache.entries).map((e: any) => e.description);
-    expect(descriptions).toEqual(expect.arrayContaining(["mid", "new"]));
-    expect(descriptions).not.toContain("old");
+    expect(cache.entries).toEqual({ c: e3, b: e2 });
   });
 });
