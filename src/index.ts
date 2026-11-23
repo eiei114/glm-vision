@@ -263,11 +263,21 @@ export function saveConfig(c: VisionConfig, configPath = getConfigPath()) {
 }
 
 // -- Cache ------------------------------------------------------
+function isUsableCacheEntry(entry: unknown): boolean {
+  // Only the description and timestamp are needed; legacy v1 rows lack image arrays.
+  return entry !== null && typeof entry === "object" && !Array.isArray(entry) &&
+    "description" in entry && typeof entry.description === "string" && entry.description.trim().length > 0 &&
+    "createdAt" in entry && typeof entry.createdAt === "string" && Number.isFinite(Date.parse(entry.createdAt));
+}
+
 export function loadCache(cachePath = getCachePath()): CacheFile {
   try {
     const raw = JSON.parse(fs.readFileSync(cachePath, "utf-8"));
     if (raw?.version === 1 && raw.entries && typeof raw.entries === "object" && !Array.isArray(raw.entries)) {
-      return raw;
+      return {
+        version: 1,
+        entries: Object.fromEntries(Object.entries<CacheEntry>(raw.entries).filter(([, entry]) => isUsableCacheEntry(entry))),
+      };
     }
   } catch {
     // Empty or invalid cache: start fresh.
@@ -327,9 +337,9 @@ export function makeCacheEntry(images: ImageData[], model: string, prompt: strin
 }
 
 export function pruneCache(cache: CacheFile, maxEntries: number) {
-  const entries = Object.entries(cache.entries).sort(
-    ([, a], [, b]) => Date.parse(b.createdAt) - Date.parse(a.createdAt),
-  );
+  const entries = Object.entries(cache.entries)
+    .filter(([, entry]) => isUsableCacheEntry(entry))
+    .sort(([, a], [, b]) => Date.parse(b.createdAt) - Date.parse(a.createdAt));
   cache.entries = Object.fromEntries(entries.slice(0, maxEntries));
 }
 
