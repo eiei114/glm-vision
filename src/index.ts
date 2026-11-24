@@ -312,11 +312,15 @@ function hashImage(img: ImageData): string {
   return hash(Buffer.from(img.base64 || "", "base64"));
 }
 
-export function makeCacheKey(images: ImageData[], model: string, prompt: string): string {
+export function makeCacheKey(images: ImageData[], model: string, prompt: string, skippedCount = 0): string {
   const imageHashes = images.map(hashImage);
   const mediaTypes = images.map((img) => img.mediaType || "unknown");
   const urls = images.map((img) => img.url);
-  return hash(JSON.stringify({ imageHashes, mediaTypes, urls, model, prompt }));
+  // Only positive counts change visionPrompt. Keep the existing key for zero omissions.
+  return hash(JSON.stringify({
+    imageHashes, mediaTypes, urls, model, prompt,
+    skippedCount: skippedCount > 0 ? skippedCount : undefined,
+  }));
 }
 
 export function makeCacheEntry(images: ImageData[], model: string, prompt: string, mode: PromptMode, description: string): CacheEntry {
@@ -809,8 +813,7 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
       const prompt = getActivePrompt(config);
       const promptMode = getPromptLabel(config);
 
-      // Cache key covers all images in the request (see makeCacheKey).
-      const cacheKey = makeCacheKey(images, config.model, prompt);
+      const cacheKey = makeCacheKey(images, config.model, prompt, skippedCount);
 
       if (config.cacheEnabled !== false) {
         const cache = loadCache(cachePath);

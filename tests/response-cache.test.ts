@@ -88,6 +88,57 @@ describe("response cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("caches identical sent images separately for each omitted image count", async () => {
+    const descriptions = ["no omissions", "one omission", "two omissions"];
+    const fetchMock = stubFetch(descriptions);
+    const configPath = tempConfigPath();
+    fs.mkdirSync(path.dirname(configPath), { recursive: true });
+    fs.writeFileSync(configPath, JSON.stringify({ maxImages: 2 }));
+    const { handlers, cachePath } = setupExtension(configPath);
+    const ctx = zaiContext();
+    const handler = handlers.get("tool_result")!;
+    const second = { ...IMAGE_BLOCK, data: "c2Vjb25k" };
+    const images = [IMAGE_BLOCK, second, { ...IMAGE_BLOCK, data: "dGhpcmQ=" }, { ...IMAGE_BLOCK, data: "Zm91cnRo" }];
+    const events = descriptions.map((_, count) => ({ toolName: "read", content: images.slice(0, 2 + count) }));
+
+    for (const [count, event] of events.entries()) {
+      const result = await handler(event, ctx);
+      expect(result.content[0].text).toContain(descriptions[count]);
+      expect(result.content[0].text).not.toContain("cache hit");
+      expect(fetchMock).toHaveBeenCalledTimes(count + 1);
+
+      const { messages } = JSON.parse(String(fetchMock.mock.calls[count][1]?.body));
+      const [prompt, ...imageContent] = messages[0].content;
+      expect(prompt.text).toContain("Image 1, Image 2");
+      if (count === 0) {
+        expect(prompt.text).not.toContain("omitted");
+      } else {
+        expect(prompt.text).toContain(`${count} additional image(s) were omitted`);
+      }
+      expect(imageContent).toEqual([
+        { type: "text", text: "Image 1:" },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${IMAGE_BLOCK.data}` } },
+        { type: "text", text: "Image 2:" },
+        { type: "image_url", image_url: { url: `data:image/png;base64,${second.data}` } },
+      ]);
+    }
+
+    for (const [count, event] of events.entries()) {
+      const result = await handler(event, ctx);
+      expect(result.content[0].text).toContain("cache hit");
+      expect(result.content[0].text).toContain(descriptions[count]);
+    }
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(Object.keys(loadCache(cachePath).entries)).toHaveLength(3);
+  });
+
+  it("keeps the pre-change key when no images are omitted", () => {
+    const images = [{ base64: IMAGE_BLOCK.data, mediaType: IMAGE_BLOCK.mediaType }];
+    const legacyKey = "30e12d352132144c50c7722647d0b94fc9c281d9c2477de5210e21b49bf56eb3";
+    expect(makeCacheKey(images, "glm-4.6v", "Describe", 0)).toBe(legacyKey);
+    expect(makeCacheKey(images, "glm-4.6v", "Describe")).toBe(legacyKey);
+  });
+
   it("misses when the model changes", async () => {
     const fetchMock = stubFetch(["model-a description", "model-b description"]);
     const { handlers, commands } = setupExtension();
