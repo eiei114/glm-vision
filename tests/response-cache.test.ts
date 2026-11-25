@@ -88,6 +88,40 @@ describe("response cache", () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it("returns the normal description when the cache target is a directory", async () => {
+    const description = "description despite cache write failure";
+    const fetchMock = stubFetch([description]);
+    const { handlers, cachePath } = setupExtension();
+    fs.mkdirSync(cachePath, { recursive: true });
+
+    const result = await handlers.get("tool_result")?.(
+      { toolName: "read", content: [IMAGE_BLOCK] },
+      zaiContext(),
+    );
+
+    expect(result?.content).toEqual([
+      { type: "text", text: `[glm-vision: ${DEFAULT_CONFIG.model} | images: 1]\n\n${description}` },
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps the original image and error text when the provider fails", async () => {
+    const fetchMock = vi.fn(async () => new Response("provider error", { status: 422 }));
+    vi.stubGlobal("fetch", fetchMock);
+    const { handlers } = setupExtension();
+
+    const result = await handlers.get("tool_result")?.(
+      { toolName: "read", content: [IMAGE_BLOCK] },
+      zaiContext(),
+    );
+
+    expect(result?.content).toEqual([
+      { type: "text", text: "[glm-vision error: Z.AI request failed (HTTP 422): provider error]" },
+      IMAGE_BLOCK,
+    ]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
   it("caches identical sent images separately for each omitted image count", async () => {
     const descriptions = ["no omissions", "one omission", "two omissions"];
     const fetchMock = stubFetch(descriptions);

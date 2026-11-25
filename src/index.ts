@@ -864,7 +864,11 @@ export function createGlmVisionExtension(options: GlmVisionExtensionOptions = {}
           const cache = loadCache(cachePath);
           cache.entries[cacheKey] = makeCacheEntry(images, config.model, prompt, promptMode, description);
           pruneCache(cache, config.cacheMaxEntries || DEFAULT_CACHE_MAX_ENTRIES);
-          saveCache(cache, cachePath);
+          try {
+            saveCache(cache, cachePath);
+          } catch {
+            // Cache persistence is best-effort; the description is already available.
+          }
         }
         return {
           content: [
