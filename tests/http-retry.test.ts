@@ -1,3 +1,4 @@
+import { getEventListeners } from "node:events";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_REQUEST_TIMEOUT_MS, describeImage, describeImages } from "../src/index";
 
@@ -278,6 +279,26 @@ describe("timeout and cancellation", () => {
     expect(error.message).toBe("Z.AI request was cancelled");
   });
 
+  it("removes completed backoff listeners from the caller signal", async () => {
+    const caller = new AbortController();
+    const { fetchMock } = stubStatusSequence([503, 503, 200]);
+    const description = describeImages(IMAGES, MODEL, PROMPT, API_KEY, 0, caller.signal);
+
+    await vi.advanceTimersByTimeAsync(0);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(getEventListeners(caller.signal, "abort")).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(500);
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    // Only the second backoff should still be listening.
+    expect(getEventListeners(caller.signal, "abort")).toHaveLength(1);
+
+    await vi.advanceTimersByTimeAsync(1000);
+    await expect(description).resolves.toBe("image description");
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(getEventListeners(caller.signal, "abort")).toHaveLength(0);
+  });
+
   it("reports cancellation and stops retrying when the caller aborts during backoff", async () => {
     const caller = new AbortController();
     const { fetchMock } = stubStatusSequence([503]);
@@ -290,12 +311,15 @@ describe("timeout and cancellation", () => {
     // Let the first attempt finish and enter its 500ms backoff.
     await vi.advanceTimersByTimeAsync(0);
     expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(vi.getTimerCount()).toBe(1);
     caller.abort();
 
-    const error = await settled;
+    expect(vi.getTimerCount()).toBe(0);
+    expect(getEventListeners(caller.signal, "abort")).toHaveLength(0);
+    expect((await settled).message).toBe("Z.AI request was cancelled");
 
+    await vi.advanceTimersByTimeAsync(1500);
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(error.message).toBe("Z.AI request was cancelled");
   });
 
   it("retries generic network failures and surfaces the last message", async () => {
