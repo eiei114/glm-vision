@@ -503,16 +503,18 @@ export function formatVisionResult(model: string, description: string, imageCoun
 // -- Vision API call -------------------------------------------
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timeout = setTimeout(resolve, ms);
-    if (!signal) return;
-
     const onAbort = () => {
       clearTimeout(timeout);
       reject(new Error("request cancelled"));
     };
 
-    if (signal.aborted) return onAbort();
-    signal.addEventListener("abort", onAbort, { once: true });
+    const timeout = setTimeout(() => {
+      signal?.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener("abort", onAbort, { once: true });
   });
 }
 
