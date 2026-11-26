@@ -264,6 +264,30 @@ describe("timeout and cancellation", () => {
     expect(callTimes[2] - callTimes[1]).toBe(30_000 + 1_000);
   });
 
+  it("recovers from one timed-out attempt with a fresh signal", async () => {
+    const requestTimeoutMs = 2_000;
+    const attempts: { signal: AbortSignal; abortedAtStart: boolean }[] = [];
+    const { fetchMock, callTimes } = stubFetch((_url, init) => {
+      const signal = init.signal!;
+      attempts.push({ signal, abortedAtStart: signal.aborted });
+      if (attempts.length === 1) {
+        return new Promise((_resolve, reject) => {
+          signal.addEventListener("abort", () => reject(signal.reason), { once: true });
+        });
+      }
+      return okResponse("recovered image description");
+    });
+
+    await expect(runDescribe({ requestTimeoutMs })).resolves.toBe("recovered image description");
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(callTimes[1] - callTimes[0]).toBe(requestTimeoutMs + 500);
+    expect(attempts[0].abortedAtStart).toBe(false);
+    expect(attempts[0].signal.aborted).toBe(true);
+    expect(attempts[1].signal).not.toBe(attempts[0].signal);
+    expect(attempts[1].abortedAtStart).toBe(false);
+  });
+
   it("does not retry an already-aborted caller signal and reports cancellation", async () => {
     const caller = new AbortController();
     caller.abort();
